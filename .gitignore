@@ -30,3 +30,7 @@ lambda/temp_lambda_zip/
 cors-response.json
 
 docs/SFConnect.txt
+
+# Local secrets file (never commit)
+aws/secrets.ps1
+.env.local
