@@ -157,7 +157,16 @@ const ProjectDetail = () => {
   const loadAllData = async (projectId: string) => {
     try {
       setLoading(true);
-      const results = await Promise.allSettled([
+      const [
+        projectData,
+        categoriesData,
+        lineItemsData,
+        vendorsData,
+        manufacturersData,
+        productsData,
+        ordersData,
+        orderItemsData,
+      ] = await Promise.all([
         projectService.getById(projectId),
         categoryService.getByProjectId(projectId),
         lineItemService.getByProjectId(projectId),
@@ -167,18 +176,6 @@ const ProjectDetail = () => {
         orderService.getByProjectId(projectId),
         orderService.getOrderItemsByProject(projectId),
       ]);
-
-      const getValue = <T,>(r: PromiseSettledResult<T>, fallback: T): T =>
-        r.status === "fulfilled" ? r.value : fallback;
-
-      const projectData      = getValue(results[0], null);
-      const categoriesData   = getValue(results[1], [] as typeof categoriesData);
-      const lineItemsData    = getValue(results[2], [] as typeof lineItemsData);
-      const vendorsData      = getValue(results[3], [] as typeof vendorsData);
-      const manufacturersData = getValue(results[4], [] as typeof manufacturersData);
-      const productsData     = getValue(results[5], [] as typeof productsData);
-      const ordersData       = getValue(results[6], [] as typeof ordersData);
-      const orderItemsData   = getValue(results[7], [] as typeof orderItemsData);
 
       // Load all product vendors
       const allProductVendors: ProductVendor[] = [];
