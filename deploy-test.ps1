@@ -17,10 +17,10 @@
 $ErrorActionPreference = "Stop"
 
 # --- Test environment resource identifiers ---
-$PROFILE    = "megapros-test"
-$S3_BUCKET  = "materials-selection-app-7525"
+$PROFILE = "megapros-test"
+$S3_BUCKET = "materials-selection-app-7525"
 $CF_DIST_ID = "E2CO2DGE8F4YUE"
-$REGION     = "us-east-1"
+$REGION = "us-east-1"
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
@@ -39,7 +39,9 @@ Write-Host "Verified: AWS account $account (test)" -ForegroundColor Green
 # Build — Vite picks up .env.local for dev/test overrides
 Write-Host ""
 Write-Host "Building..." -ForegroundColor Cyan
-npm run build
+# Use --mode development so .env.production is NOT loaded (prevents prod API URLs
+# from overriding the test values in .env.local)
+npm run build:test
 if ($LASTEXITCODE -ne 0) { Write-Error "Build failed"; exit 1 }
 
 # Sync to S3

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:test": "tsc -b && vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
     "deploy:s3": "pwsh -File aws/deploy-s3.ps1"
