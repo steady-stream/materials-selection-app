@@ -1,7 +1,13 @@
-import { Link, useLocation } from "react-router-dom";
+import { Link, Outlet, useLocation } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
 
-const Layout = ({ children }: { children: React.ReactNode }) => {
+/**
+ * Pathless layout route — renders nav + <Outlet /> for all protected routes.
+ * Used as <Route element={<Layout />}> with child routes nested inside.
+ */
+const Layout = () => {
   const location = useLocation();
+  const { userEmail, logout } = useAuth();
 
   const isActive = (path: string) => {
     return (
@@ -13,7 +19,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
       <nav className="bg-gradient-to-r from-indigo-600 to-purple-600 shadow-lg">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
+          <div className="flex justify-between h-16 items-center">
             <div className="flex">
               <div className="flex-shrink-0 flex items-center">
                 <h1 className="text-2xl font-bold text-white flex items-center gap-2">
@@ -76,10 +82,41 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 </Link>
               </div>
             </div>
+
+            {/* Right side: signed-in user + sign out */}
+            <div className="flex items-center gap-3">
+              {userEmail && (
+                <span className="hidden sm:block text-white/70 text-xs truncate max-w-[180px]">
+                  {userEmail}
+                </span>
+              )}
+              <button
+                onClick={logout}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white/80 hover:text-white hover:bg-white/10 rounded-md transition-colors"
+                title="Sign out"
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                  />
+                </svg>
+                Sign out
+              </button>
+            </div>
           </div>
         </div>
       </nav>
-      <main className="max-w-7xl mx-auto py-8 sm:px-6 lg:px-8">{children}</main>
+      <main className="max-w-7xl mx-auto py-8 sm:px-6 lg:px-8">
+        <Outlet />
+      </main>
     </div>
   );
 };

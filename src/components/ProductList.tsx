@@ -54,6 +54,9 @@ const ProductList = () => {
     imageUrl: "",
     productUrl: "",
   });
+  const [primaryVendorId, setPrimaryVendorId] = useState("");
+  const [primaryVendorSku, setPrimaryVendorSku] = useState("");
+  const [primaryVendorCost, setPrimaryVendorCost] = useState("");
 
   useEffect(() => {
     loadData();
@@ -110,6 +113,9 @@ const ProductList = () => {
         imageUrl: product.imageUrl || "",
         productUrl: product.productUrl || "",
       });
+      setPrimaryVendorId("");
+      setPrimaryVendorSku("");
+      setPrimaryVendorCost("");
     } else {
       setEditingProduct(null);
       setFormData({
@@ -124,6 +130,9 @@ const ProductList = () => {
         imageUrl: "",
         productUrl: "",
       });
+      setPrimaryVendorId("");
+      setPrimaryVendorSku("");
+      setPrimaryVendorCost("");
     }
     setIsModalOpen(true);
   };
@@ -143,10 +152,22 @@ const ProductList = () => {
       imageUrl: "",
       productUrl: "",
     });
+    setPrimaryVendorId("");
+    setPrimaryVendorSku("");
+    setPrimaryVendorCost("");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const primaryVendorCostValue = primaryVendorId
+      ? primaryVendorCost.trim() === ""
+        ? 0
+        : parseFloat(primaryVendorCost)
+      : null;
+    if (primaryVendorId && Number.isNaN(primaryVendorCostValue)) {
+      setError("Primary vendor cost must be a valid number");
+      return;
+    }
     try {
       // Convert empty string tier to undefined for API compatibility
       const submitData = {
@@ -163,6 +184,25 @@ const ProductList = () => {
       } else {
         const created = await productService.createProduct(submitData);
         setProducts([...products, created]);
+        if (primaryVendorId) {
+          try {
+            const createdVendor = await productVendorService.create({
+              productId: created.id,
+              vendorId: primaryVendorId,
+              cost: primaryVendorCostValue ?? 0,
+              sku: primaryVendorSku.trim() || undefined,
+              isPrimary: true,
+            });
+            setAllProductVendors(
+              new Map(allProductVendors).set(created.id, [createdVendor]),
+            );
+          } catch (vendorError) {
+            setError(
+              "Product saved, but failed to create primary vendor relationship",
+            );
+            console.error("Error creating primary vendor:", vendorError);
+          }
+        }
       }
       handleCloseModal();
     } catch (err) {
@@ -962,6 +1002,65 @@ const ProductList = () => {
                     className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
+                {!editingProduct && (
+                  <>
+                    <div className="col-span-2 border-t pt-3">
+                      <div className="text-xs font-semibold text-gray-700">
+                        Primary Vendor (optional)
+                      </div>
+                      <div className="text-[11px] text-gray-500">
+                        If selected, a Product Vendor relationship will be
+                        created as PRIMARY.
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Primary Vendor
+                      </label>
+                      <select
+                        value={primaryVendorId}
+                        onChange={(e) => setPrimaryVendorId(e.target.value)}
+                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                      >
+                        <option value="">Select Vendor...</option>
+                        {vendors.map((v) => (
+                          <option key={v.id} value={v.id}>
+                            {v.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Vendor SKU
+                      </label>
+                      <input
+                        type="text"
+                        value={primaryVendorSku}
+                        onChange={(e) => setPrimaryVendorSku(e.target.value)}
+                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Vendor Cost
+                      </label>
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-gray-600">$</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={primaryVendorCost}
+                          onChange={(e) => setPrimaryVendorCost(e.target.value)}
+                          className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                        />
+                        <span className="text-xs text-gray-600">
+                          / {formData.unit || "ea"}
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
               <div className="flex justify-end gap-2 mt-4 pt-3 border-t">
                 <button
