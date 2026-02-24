@@ -17,10 +17,10 @@ $ErrorActionPreference = "Stop"
 
 # --- PRODUCTION resource identifiers ---
 # Update these after running aws/setup-prod-infrastructure.ps1
-$PROFILE    = "megapros-prod"
-$S3_BUCKET  = "REPLACE_WITH_PROD_S3_BUCKET"     # e.g. "materials-selection-prod-XXXX"
-$CF_DIST_ID = "REPLACE_WITH_PROD_CF_DIST_ID"    # e.g. "EXXXXXXXXXX"
-$REGION     = "us-east-1"
+$PROFILE = "megapros-prod"
+$S3_BUCKET  = "materials-selection-prod-3039"
+$CF_DIST_ID = "E2PTMMBR8VRR3W"
+$REGION = "us-east-1"
 
 # Guard: refuse to run until placeholders are replaced
 if ($S3_BUCKET -like "REPLACE_*" -or $CF_DIST_ID -like "REPLACE_*") {

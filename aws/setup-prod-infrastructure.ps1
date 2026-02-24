@@ -543,7 +543,7 @@ foreach ($fn in $lambdaNames) {
         --statement-id APIGatewayInvoke `
         --action lambda:InvokeFunction `
         --principal apigateway.amazonaws.com `
-        --source-arn "arn:aws:execute-api:$REGION:${PROD_ACCOUNT}:${API_ID}/*/*/*" `
+        --source-arn "arn:aws:execute-api:${REGION}:${PROD_ACCOUNT}:${API_ID}/*/*/*" `
         --profile $PROFILE --region $REGION 2>&1 | Out-Null
 }
 Write-Ok "Invoke permissions set"
