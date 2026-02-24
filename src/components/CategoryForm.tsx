@@ -142,7 +142,7 @@ const CategoryForm = () => {
                     type="number"
                     name="allowance"
                     id="allowance"
-                    step="0.01"
+                    step="1"
                     value={formData.allowance}
                     onChange={handleChange}
                     className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md px-3 py-2 border"
