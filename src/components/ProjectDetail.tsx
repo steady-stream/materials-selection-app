@@ -1920,7 +1920,7 @@ const ProjectDetail = () => {
                                 <td className="px-2 py-1">
                                   <input
                                     type="number"
-                                    step="0.01"
+                                    step="1"
                                     value={editingItem.allowance || 0}
                                     onChange={(e) =>
                                       setEditingItem({
@@ -2436,7 +2436,7 @@ const ProjectDetail = () => {
                             <td className="px-2 py-1">
                               <input
                                 type="number"
-                                step="0.01"
+                                step="1"
                                 value={newItem.allowance || 0}
                                 onChange={(e) =>
                                   setNewItem({
@@ -3130,7 +3130,7 @@ const ProjectDetail = () => {
                                   <td className="px-2 py-1">
                                     <input
                                       type="number"
-                                      step="0.01"
+                                      step="1"
                                       value={editingItem.allowance || 0}
                                       onChange={(e) =>
                                         setEditingItem({
