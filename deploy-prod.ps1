@@ -18,7 +18,7 @@ $ErrorActionPreference = "Stop"
 # --- PRODUCTION resource identifiers ---
 # Update these after running aws/setup-prod-infrastructure.ps1
 $PROFILE = "megapros-prod"
-$S3_BUCKET  = "materials-selection-prod-3039"
+$S3_BUCKET = "materials-selection-prod-3039"
 $CF_DIST_ID = "E2PTMMBR8VRR3W"
 $REGION = "us-east-1"
 
@@ -52,11 +52,32 @@ if ($account -match "^An error") {
 }
 Write-Host "Verified: AWS account $account (production)" -ForegroundColor Green
 
-# Build — Vite uses .env.production when NODE_ENV=production (default for build)
-Write-Host ""
-Write-Host "Building..." -ForegroundColor Yellow
-npm run build
-if ($LASTEXITCODE -ne 0) { Write-Error "Build failed"; exit 1 }
+# Guard: .env.local has HIGHER priority than .env.production in Vite's env
+# loading order. Automatically move it aside for the duration of the build so
+# .env.production values are guaranteed to be used — no human judgment needed.
+$envLocalMoved = $false
+if (Test-Path ".env.local") {
+    Write-Host ""
+    Write-Host "Found .env.local — temporarily renaming to .env.local.bak so" -ForegroundColor Yellow
+    Write-Host "  .env.production is used exclusively for this prod build." -ForegroundColor Yellow
+    Rename-Item ".env.local" ".env.local.bak"
+    $envLocalMoved = $true
+}
+
+# Build — wrapped in try/finally so .env.local is ALWAYS restored even if the
+# build fails, keeping the dev/test environment intact afterward.
+try {
+    Write-Host ""
+    Write-Host "Building..." -ForegroundColor Yellow
+    npm run build
+    if ($LASTEXITCODE -ne 0) { throw "Build failed" }
+} finally {
+    if ($envLocalMoved) {
+        Rename-Item ".env.local.bak" ".env.local"
+        Write-Host ".env.local restored." -ForegroundColor Yellow
+    }
+}
+
 
 # Sync to S3
 Write-Host ""
