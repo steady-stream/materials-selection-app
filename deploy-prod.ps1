@@ -71,7 +71,8 @@ try {
     Write-Host "Building..." -ForegroundColor Yellow
     npm run build
     if ($LASTEXITCODE -ne 0) { throw "Build failed" }
-} finally {
+}
+finally {
     if ($envLocalMoved) {
         Rename-Item ".env.local.bak" ".env.local"
         Write-Host ".env.local restored." -ForegroundColor Yellow

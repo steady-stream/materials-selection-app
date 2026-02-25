@@ -1,29 +1,142 @@
 # Materials Selection App - Development Status
 
-**Last Updated:** February 8, 2026  
-**Environment:** Production (mpmaterials.apiaconsulting.com)
+**Last Updated:** February 24, 2026  
+**Environments:** Test (mpmaterials.apiaconsulting.com) | Production (separate AWS account)
 
 ## Current Status Summary
 
-✅ **Working:**
-
-- All project CRUD operations (Create, Read, Update, Delete)
-- All product CRUD operations
-- All manufacturer CRUD operations
-- All vendor CRUD operations
+✅ **Working — Test environment (AWS account 634752426026):**
+- Full dual-environment deployment pipeline (test + prod are fully independent)
+- All project CRUD operations
+- All product/manufacturer/vendor CRUD operations
 - Product-vendor relationship management
-- All endpoints have proper CORS configuration
-- Frontend deployed to S3/CloudFront
-- Backend Lambda (MaterialsSelection-API) operational
-- **Salesforce integration** - Create projects from Salesforce opportunities (NEW as of Feb 8, 2026)
+- Cognito authentication (login, session persistence, logout)
+- Salesforce opportunity → project creation workflow
+- PowerPoint export from project detail
+- Line item options (Good/Better/Best alternatives)
+- All allowance fields increment by 1 (not 0.01)
+
+✅ **Working — Production environment (AWS account 860601623272):**
+- All of the above, independently deployed
 
 ⚠️ **Known Issues:**
-
 - None currently
 
 ---
 
-## Critical Issues Encountered & Resolved
+## Environments & Deployment
+
+### Test
+| Resource | Value |
+|----------|-------|
+| AWS Account | 634752426026 |
+| API Gateway ID | xrld1hq3e2 (stage: `/prod`) |
+| Cognito User Pool | us-east-1_K72aPw18O |
+| Cognito Client ID | 6h7ebr5r1gqvngrdv5lacfmh3b |
+| S3 Bucket | materials-selection-app-7525 |
+| CloudFront | E2CO2DGE8F4YUE |
+| URL | https://mpmaterials.apiaconsulting.com |
+| AWS Profile | megapros-test |
+| Deploy script | `.\deploy-test.ps1` |
+| Build script | `npm run build:test` (uses `--mode development` → `.env.local` only) |
+
+### Production
+| Resource | Value |
+|----------|-------|
+| AWS Account | 860601623272 |
+| API Gateway ID | 6extgb87v1 (stage: `/prod`) |
+| Cognito User Pool | us-east-1_r52mUYVd5 |
+| Cognito Client ID | 2re1l5aultf5jfr38de3tppbrp |
+| S3 Bucket | materials-selection-prod-3039 |
+| CloudFront | E2PTMMBR8VRR3W |
+| AWS Profile | megapros-prod |
+| Deploy script | `.\deploy-prod.ps1` |
+| Build script | `npm run build` (uses `.env.production`; `.env.local` auto-moved aside) |
+
+### Vite Environment File Priority (CRITICAL)
+Vite loads env files highest-priority first:
+1. `.env.local` — **overrides everything**, baked into every build on this machine
+2. `.env.production` — used by `npm run build` (prod mode)
+3. `.env.development` — used by `npm run build --mode development`
+
+**`deploy-prod.ps1` automatically renames `.env.local` → `.env.local.bak` before
+building, then restores it after — ensuring prod builds always use `.env.production`
+exclusively. No human action required.**
+
+---
+
+## Session Summary — February 24, 2026
+
+### Features Delivered
+- **Allowance field step increment** changed from `0.01` → `1` across all inputs:
+  - `CategoryForm.tsx` (standalone category form)
+  - `ProjectDetail.tsx` — Add Section modal
+  - `ProjectDetail.tsx` — Edit Section modal
+  - `ProjectDetail.tsx` — Inline add line item row
+  - `ProjectDetail.tsx` — Inline edit line item row
+
+### Infrastructure / DevOps
+- **Dual-environment deploy pipeline validated end-to-end:**
+  - Change deployed to test → verified working → deployed to prod → both confirmed working
+- **`deploy-prod.ps1` hardened:** Now automatically moves `.env.local` aside during build (try/finally ensures it is always restored even on build failure). No more "type YES" prompt — risk is eliminated mechanically.
+- **`build:test` script added** to `package.json`: `tsc -b && vite build --mode development` — ensures test builds never load `.env.production`.
+
+### Incident Resolved (see [INCIDENT-2026-02-24-TEST-ENV-BROKEN.md](./INCIDENT-2026-02-24-TEST-ENV-BROKEN.md))
+- Test site showed "Application Error" after login
+- Root cause: `.env.local` contained a non-existent API Gateway ID (`fiad7hd58j`)
+- Fix: corrected to `xrld1hq3e2/prod` (the original test API, still live)
+- Safeguards added to `.env.local` comments and `deploy-prod.ps1`
+
+### Git Commits (Feb 24)
+| Hash | Description |
+|------|-------------|
+| `2679e4e` | Change allowance field increment from 0.01 to 1 (CategoryForm) |
+| `f62639c` | Fix test deploy using wrong env: use --mode development |
+| `e612077` | Revert Promise.allSettled change (issue was config, not code) |
+| `c84d99c` | Change allowance step to 1 in ProjectDetail section modals |
+| `0e89e6f` | deploy-prod: auto-move .env.local aside during build |
+| `5ecb75a` | Change allowance step to 1 in inline add/edit item rows |
+
+---
+
+## Recent Features Added (February 9–24, 2026)
+
+### Cognito Authentication ✅
+- Login page with session persistence (survives page reload)
+- `AuthProvider` / `useAuth` context
+- `ProtectedRoute` guard — redirects to `/login`, preserves intended destination
+- First-login new-password challenge flow
+
+### PowerPoint Export ✅
+- Generates `.pptx` from project detail page
+- Client-side generation using `pptxgenjs`
+- Dynamic sizing, collision detection, error handling
+
+### Line Item Options (Good/Better/Best) ✅
+- Attach product alternatives to line items
+- `ChooseOptionsModal` for selection
+- `lineItemOptionService` backend integration
+
+---
+
+## Frontend Deployment
+
+### Test
+**S3:** materials-selection-app-7525 | **CF:** E2CO2DGE8F4YUE  
+**Latest bundle:** index-C-RuEMj-.js  
+```
+.\deploy-test.ps1
+```
+
+### Production
+**S3:** materials-selection-prod-3039 | **CF:** E2PTMMBR8VRR3W  
+**Latest bundle:** index-e6cLxuy5.js  
+```
+.\deploy-prod.ps1
+```
+Script auto-handles `.env.local` isolation — no manual steps needed.
+
+---
 
 ### Issue #1: AWS Account Mismatch in Lambda Integrations
 
@@ -210,99 +323,7 @@ arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-
 
 ---
 
-## Recent Features Added (February 8, 2026)
-
-### Salesforce Integration - RESOLVED ✅
-
-**Previous Status:** Modal rendering broken, non-functional  
-**Current Status:** Fully functional with new implementation
-
-**What We Built:**
-
-Completely new Salesforce integration that allows users to create projects from Salesforce opportunities. Implementation uses separate modal and state management to avoid interfering with existing project creation workflow.
-
-**Features:**
-
-- Two-step workflow: Select opportunity → Pre-populated project form
-- Fetches 43+ active Salesforce opportunities
-- Pre-fills project data from Salesforce (client name, address, contact info, opportunity ID)
-- User can edit pre-filled data before creating project
-- Loading states with visual feedback
-- Proper error handling
-- Creates project with opportunityId reference for future lookups
-
-**Architecture:**
-
-- Separate Lambda function: MaterialsSelection-Salesforce-API
-- Separate modal state variables (no shared state with regular project creation)
-- Separate submit handlers
-- Backend changes: Added 3 optional fields to projects (mobilePhone, preferredContactMethod, opportunityId)
-
-**Files Modified:**
-
-- `lambda/index.js` - Added 3 optional fields to createProject function
-- `src/components/ProjectList.tsx` - Added Salesforce modal and workflow
-- Both regular and Salesforce modals now have identical field sets for consistency
-
-**Git Commits:**
-
-- `62ae9e2` - "Add Salesforce opportunity integration"
-- `31833a6` - "Add Mobile Phone and Preferred Contact Method fields to regular project modal"
-
-**User Verification:**
-
-- ✅ "That is working as expected" (Salesforce workflow)
-- ✅ "OK. that works" (Loading spinner)
-
-For detailed architecture analysis and lessons learned, see: [ARCHITECTURE_LESSONS_AND_POWERPOINT_PLAN.md](./ARCHITECTURE_LESSONS_AND_POWERPOINT_PLAN.md)
-
----
-
-## Known Issues & Technical Debt
-
-### 1. ~~Salesforce Integration Modal~~ - RESOLVED Feb 8, 2026
-
-~~**Location:** `/projects/new` page, Salesforce checkbox~~  
-~~**Status:** Non-functional, temporarily disabled~~
-
-**RESOLUTION:** Built completely new implementation. Old problematic code removed. New implementation working in production.
-
-### 2. Lambda Permission Configuration
-
-**Current State:**
-Lambda has broad permission statement `apigateway-all-methods` allowing all API Gateway invocations:
-
-```
-arn:aws:execute-api:us-east-1:634752426026:xrld1hq3e2/*/*
-```
-
-This works but is overly permissive. Also has some orphaned statements with wrong account ID from earlier troubleshooting attempts.
-
-**Recommendation:**
-Clean up Lambda policy to remove duplicate/incorrect statements once all functionality is verified working.
-
----
-
-## Frontend Deployment
-
-**S3 Bucket:** materials-selection-app-7525  
-**CloudFront Distribution:** E2CO2DGE8F4YUE  
-**Domain:** https://mpmaterials.apiaconsulting.com  
-**Build Tool:** Vite (rolldown-vite v7.2.5)  
-**Current Bundle:** index-DCMT1qdX.js (458.87 KB)
-
-**Deployment Process:**
-
-1. `npm run build`
-2. `aws s3 sync dist/ s3://materials-selection-app-7525 --delete`
-3. `aws cloudfront create-invalidation --distribution-id E2CO2DGE8F4YUE --paths "/*"`
-4. Hard refresh browser (Ctrl+Shift+R)
-
-**Cache Invalidations Today:** 7+ (multiple debugging cycles)
-
----
-
-## Backend Lambda
+## Historical Infrastructure Notes
 
 **Function Name:** MaterialsSelection-API  
 **Runtime:** Node.js 20.x  
@@ -361,30 +382,12 @@ Created entirely new /product-vendors and /product-vendors/{id} resources with f
 
 ## Next Session Priorities
 
-1. **PowerPoint Export Feature** (In Planning)
-   - Add ability to generate PowerPoint presentations from project details
-   - See detailed plan in: [ARCHITECTURE_LESSONS_AND_POWERPOINT_PLAN.md](./ARCHITECTURE_LESSONS_AND_POWERPOINT_PLAN.md)
-   - Recommended approach: Client-side generation using pptxgenjs
-   - Estimated effort: 4-6 hours implementation + testing
-
+1. **AI / Chat Assistant** — scoped in [AI_INTEGRATION_PLAN.md](./AI_INTEGRATION_PLAN.md)
 2. **Code Cleanup**
-   - Remove unused PowerShell scripts or move to `/scripts` folder
-   - Clean up Lambda permissions (remove wrong account statements)
-   - Consider consolidating similar code patterns across components
-
-3. **Testing & Documentation**
-   - Test all CRUD operations end-to-end
-   - Test product-vendor relationships thoroughly
-   - Update user documentation with new Salesforce workflow
-   - Add screenshots/video walkthrough of key features
+   - Remove unused PowerShell scripts or move to `/scripts`
+   - Clean up Lambda permissions (remove orphaned wrong-account statements)
+3. **Lambda permission tightening** — replace broad `apigateway-all-methods` with least-privilege ARNs
 
 ---
 
-## Important Notes
-
-- **Always verify AWS account ID** when creating new Lambda integrations
-- **CORS requires TWO steps**: method response definition + integration response with values
-- **PowerShell quoting:** Use here-strings for complex JSON with embedded quotes
-- **Deployment is required** after any API Gateway changes
-- **Cache invalidation is critical** for CloudFront to serve updated frontend code
-- **The Lambda code is already correct** - most issues are API Gateway configuration
+## Historical Issues & Resolutions
