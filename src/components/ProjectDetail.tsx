@@ -3646,7 +3646,7 @@ const ProjectDetail = () => {
                 </label>
                 <input
                   type="number"
-                  step="0.01"
+                  step="1"
                   value={newCategory.allowance}
                   onChange={(e) =>
                     setNewCategory({
@@ -3864,7 +3864,7 @@ const ProjectDetail = () => {
                 </label>
                 <input
                   type="number"
-                  step="0.01"
+                  step="1"
                   value={editingItem.allowance || 0}
                   onChange={(e) =>
                     setEditingItem({
