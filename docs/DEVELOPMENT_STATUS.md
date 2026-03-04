@@ -91,7 +91,7 @@ exclusively. No human action required.**
 
 | Hash | Description |
 | ---- | ----------- |
-| TBD  | Upgrade Lambda runtime from nodejs20.x to nodejs22.x |
+| `e7aaf4e` | Upgrade Lambda runtime from nodejs20.x to nodejs22.x |
 
 ---
 
