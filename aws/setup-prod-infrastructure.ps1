@@ -42,14 +42,14 @@ $ErrorActionPreference = "Stop"
 # CONFIGURATION
 # ===========================================================================
 
-$PROFILE        = "megapros-prod"
-$REGION         = "us-east-1"
-$APP            = "MaterialsSelection"
-$S3_BUCKET      = $BucketName
-$LAMBDA_ROLE    = "$APP-Lambda-Role"
-$MAIN_LAMBDA    = "$APP-API"
-$SF_LAMBDA      = "$APP-Salesforce-API"
-$TEST_ACCOUNT   = "634752426026"   # test account — used to retrieve Python Lambda zips
+$PROFILE = "megapros-prod"
+$REGION = "us-east-1"
+$APP = "MaterialsSelection"
+$S3_BUCKET = $BucketName
+$LAMBDA_ROLE = "$APP-Lambda-Role"
+$MAIN_LAMBDA = "$APP-API"
+$SF_LAMBDA = "$APP-Salesforce-API"
+$TEST_ACCOUNT = "634752426026"   # test account — used to retrieve Python Lambda zips
 
 # ---------------------------------------------------------------------------
 # Salesforce credentials for Salesforce Lambda
@@ -58,7 +58,8 @@ $TEST_ACCOUNT   = "634752426026"   # test account — used to retrieve Python La
 $secretsFile = "$PSScriptRoot\secrets.ps1"
 if (Test-Path $secretsFile) {
     . $secretsFile
-} else {
+}
+else {
     Write-Error "Secrets file not found: $secretsFile`nCopy aws/secrets.ps1.example to aws/secrets.ps1 and fill in the values."
     exit 1
 }
@@ -82,7 +83,7 @@ function Write-Section([string]$title) {
 }
 
 function Write-Step([string]$msg) { Write-Host "  -> $msg" -ForegroundColor White }
-function Write-Ok([string]$msg)   { Write-Host "  OK: $msg" -ForegroundColor Green }
+function Write-Ok([string]$msg) { Write-Host "  OK: $msg" -ForegroundColor Green }
 function Write-Skip([string]$msg) { Write-Host "  SKIP: $msg (already exists)" -ForegroundColor Yellow }
 
 # ===========================================================================
@@ -127,8 +128,8 @@ function New-DDBTable {
 
     if ($GSIs.Count -gt 0) {
         $gsiDefs = ($GSIs | ForEach-Object {
-            "IndexName=$($_.Name),KeySchema=[{AttributeName=$($_.HashKey),KeyType=HASH}],Projection={ProjectionType=ALL}"
-        }) -join " "
+                "IndexName=$($_.Name),KeySchema=[{AttributeName=$($_.HashKey),KeyType=HASH}],Projection={ProjectionType=ALL}"
+            }) -join " "
         $cmd += " --global-secondary-indexes `"$gsiDefs`""
     }
 
@@ -141,8 +142,8 @@ function New-DDBTable {
     $existing = aws dynamodb describe-table --table-name $_ --profile $PROFILE --region $REGION 2>&1
     if ($LASTEXITCODE -eq 0) { Write-Skip $_; return }
     aws dynamodb create-table --table-name $_ `
-        --attribute-definitions AttributeName=id,AttributeType=S `
-        --key-schema AttributeName=id,KeyType=HASH `
+        --attribute-definitions AttributeName=id, AttributeType=S `
+        --key-schema AttributeName=id, KeyType=HASH `
         --billing-mode PAY_PER_REQUEST `
         --profile $PROFILE --region $REGION | Out-Null
     Write-Ok $_
@@ -153,104 +154,112 @@ $t = "$APP-Categories"
 $existing = aws dynamodb describe-table --table-name $t --profile $PROFILE --region $REGION 2>&1
 if ($LASTEXITCODE -ne 0) {
     aws dynamodb create-table --table-name $t `
-        --attribute-definitions AttributeName=id,AttributeType=S AttributeName=projectId,AttributeType=S `
-        --key-schema AttributeName=id,KeyType=HASH `
+        --attribute-definitions AttributeName=id, AttributeType=S AttributeName=projectId, AttributeType=S `
+        --key-schema AttributeName=id, KeyType=HASH `
         --billing-mode PAY_PER_REQUEST `
         --global-secondary-indexes "IndexName=ProjectIdIndex,KeySchema=[{AttributeName=projectId,KeyType=HASH}],Projection={ProjectionType=ALL}" `
         --profile $PROFILE --region $REGION | Out-Null
     Write-Ok $t
-} else { Write-Skip $t }
+}
+else { Write-Skip $t }
 
 # LineItems: GSIs on projectId and categoryId
 $t = "$APP-LineItems"
 $existing = aws dynamodb describe-table --table-name $t --profile $PROFILE --region $REGION 2>&1
 if ($LASTEXITCODE -ne 0) {
     aws dynamodb create-table --table-name $t `
-        --attribute-definitions AttributeName=id,AttributeType=S AttributeName=projectId,AttributeType=S AttributeName=categoryId,AttributeType=S `
-        --key-schema AttributeName=id,KeyType=HASH `
+        --attribute-definitions AttributeName=id, AttributeType=S AttributeName=projectId, AttributeType=S AttributeName=categoryId, AttributeType=S `
+        --key-schema AttributeName=id, KeyType=HASH `
         --billing-mode PAY_PER_REQUEST `
         --global-secondary-indexes "IndexName=ProjectIdIndex,KeySchema=[{AttributeName=projectId,KeyType=HASH}],Projection={ProjectionType=ALL}" "IndexName=CategoryIdIndex,KeySchema=[{AttributeName=categoryId,KeyType=HASH}],Projection={ProjectionType=ALL}" `
         --profile $PROFILE --region $REGION | Out-Null
     Write-Ok $t
-} else { Write-Skip $t }
+}
+else { Write-Skip $t }
 
 # LineItemOptions: GSI on lineItemId
 $t = "$APP-LineItemOptions"
 $existing = aws dynamodb describe-table --table-name $t --profile $PROFILE --region $REGION 2>&1
 if ($LASTEXITCODE -ne 0) {
     aws dynamodb create-table --table-name $t `
-        --attribute-definitions AttributeName=id,AttributeType=S AttributeName=lineItemId,AttributeType=S `
-        --key-schema AttributeName=id,KeyType=HASH `
+        --attribute-definitions AttributeName=id, AttributeType=S AttributeName=lineItemId, AttributeType=S `
+        --key-schema AttributeName=id, KeyType=HASH `
         --billing-mode PAY_PER_REQUEST `
         --global-secondary-indexes "IndexName=lineItemId-index,KeySchema=[{AttributeName=lineItemId,KeyType=HASH}],Projection={ProjectionType=ALL}" `
         --profile $PROFILE --region $REGION | Out-Null
     Write-Ok $t
-} else { Write-Skip $t }
+}
+else { Write-Skip $t }
 
 # Products: GSI on manufacturerId
 $t = "$APP-Products"
 $existing = aws dynamodb describe-table --table-name $t --profile $PROFILE --region $REGION 2>&1
 if ($LASTEXITCODE -ne 0) {
     aws dynamodb create-table --table-name $t `
-        --attribute-definitions AttributeName=id,AttributeType=S AttributeName=manufacturerId,AttributeType=S `
-        --key-schema AttributeName=id,KeyType=HASH `
+        --attribute-definitions AttributeName=id, AttributeType=S AttributeName=manufacturerId, AttributeType=S `
+        --key-schema AttributeName=id, KeyType=HASH `
         --billing-mode PAY_PER_REQUEST `
         --global-secondary-indexes "IndexName=ManufacturerIdIndex,KeySchema=[{AttributeName=manufacturerId,KeyType=HASH}],Projection={ProjectionType=ALL}" `
         --profile $PROFILE --region $REGION | Out-Null
     Write-Ok $t
-} else { Write-Skip $t }
+}
+else { Write-Skip $t }
 
 # ProductVendors: GSI on productId
 $t = "$APP-ProductVendors"
 $existing = aws dynamodb describe-table --table-name $t --profile $PROFILE --region $REGION 2>&1
 if ($LASTEXITCODE -ne 0) {
     aws dynamodb create-table --table-name $t `
-        --attribute-definitions AttributeName=id,AttributeType=S AttributeName=productId,AttributeType=S `
-        --key-schema AttributeName=id,KeyType=HASH `
+        --attribute-definitions AttributeName=id, AttributeType=S AttributeName=productId, AttributeType=S `
+        --key-schema AttributeName=id, KeyType=HASH `
         --billing-mode PAY_PER_REQUEST `
         --global-secondary-indexes "IndexName=ProductIdIndex,KeySchema=[{AttributeName=productId,KeyType=HASH}],Projection={ProjectionType=ALL}" `
         --profile $PROFILE --region $REGION | Out-Null
     Write-Ok $t
-} else { Write-Skip $t }
+}
+else { Write-Skip $t }
 
 # Orders: GSIs on projectId and vendorId
 $t = "$APP-Orders"
 $existing = aws dynamodb describe-table --table-name $t --profile $PROFILE --region $REGION 2>&1
 if ($LASTEXITCODE -ne 0) {
     aws dynamodb create-table --table-name $t `
-        --attribute-definitions AttributeName=id,AttributeType=S AttributeName=projectId,AttributeType=S AttributeName=vendorId,AttributeType=S `
-        --key-schema AttributeName=id,KeyType=HASH `
+        --attribute-definitions AttributeName=id, AttributeType=S AttributeName=projectId, AttributeType=S AttributeName=vendorId, AttributeType=S `
+        --key-schema AttributeName=id, KeyType=HASH `
         --billing-mode PAY_PER_REQUEST `
         --global-secondary-indexes "IndexName=ProjectIndex,KeySchema=[{AttributeName=projectId,KeyType=HASH}],Projection={ProjectionType=ALL}" "IndexName=VendorIndex,KeySchema=[{AttributeName=vendorId,KeyType=HASH}],Projection={ProjectionType=ALL}" `
         --profile $PROFILE --region $REGION | Out-Null
     Write-Ok $t
-} else { Write-Skip $t }
+}
+else { Write-Skip $t }
 
 # OrderItems: GSIs on orderId and lineItemId
 $t = "$APP-OrderItems"
 $existing = aws dynamodb describe-table --table-name $t --profile $PROFILE --region $REGION 2>&1
 if ($LASTEXITCODE -ne 0) {
     aws dynamodb create-table --table-name $t `
-        --attribute-definitions AttributeName=id,AttributeType=S AttributeName=orderId,AttributeType=S AttributeName=lineItemId,AttributeType=S `
-        --key-schema AttributeName=id,KeyType=HASH `
+        --attribute-definitions AttributeName=id, AttributeType=S AttributeName=orderId, AttributeType=S AttributeName=lineItemId, AttributeType=S `
+        --key-schema AttributeName=id, KeyType=HASH `
         --billing-mode PAY_PER_REQUEST `
         --global-secondary-indexes "IndexName=OrderIndex,KeySchema=[{AttributeName=orderId,KeyType=HASH}],Projection={ProjectionType=ALL}" "IndexName=LineItemIndex,KeySchema=[{AttributeName=lineItemId,KeyType=HASH}],Projection={ProjectionType=ALL}" `
         --profile $PROFILE --region $REGION | Out-Null
     Write-Ok $t
-} else { Write-Skip $t }
+}
+else { Write-Skip $t }
 
 # Receipts: GSIs on orderId and orderItemId
 $t = "$APP-Receipts"
 $existing = aws dynamodb describe-table --table-name $t --profile $PROFILE --region $REGION 2>&1
 if ($LASTEXITCODE -ne 0) {
     aws dynamodb create-table --table-name $t `
-        --attribute-definitions AttributeName=id,AttributeType=S AttributeName=orderId,AttributeType=S AttributeName=orderItemId,AttributeType=S `
-        --key-schema AttributeName=id,KeyType=HASH `
+        --attribute-definitions AttributeName=id, AttributeType=S AttributeName=orderId, AttributeType=S AttributeName=orderItemId, AttributeType=S `
+        --key-schema AttributeName=id, KeyType=HASH `
         --billing-mode PAY_PER_REQUEST `
         --global-secondary-indexes "IndexName=OrderIndex,KeySchema=[{AttributeName=orderId,KeyType=HASH}],Projection={ProjectionType=ALL}" "IndexName=OrderItemIndex,KeySchema=[{AttributeName=orderItemId,KeyType=HASH}],Projection={ProjectionType=ALL}" `
         --profile $PROFILE --region $REGION | Out-Null
     Write-Ok $t
-} else { Write-Skip $t }
+}
+else { Write-Skip $t }
 
 # ===========================================================================
 # SECTION 2: S3 Bucket (static website hosting)
@@ -270,11 +279,12 @@ if ($LASTEXITCODE -ne 0) {
     aws s3 website "s3://$S3_BUCKET" --index-document index.html --error-document index.html --profile $PROFILE | Out-Null
 
     Write-Step "Setting bucket policy (public read)..."
-    $policy = @{ Version="2012-10-17"; Statement=@(@{ Effect="Allow"; Principal="*"; Action="s3:GetObject"; Resource="arn:aws:s3:::$S3_BUCKET/*" }) } | ConvertTo-Json -Compress
+    $policy = @{ Version = "2012-10-17"; Statement = @(@{ Effect = "Allow"; Principal = "*"; Action = "s3:GetObject"; Resource = "arn:aws:s3:::$S3_BUCKET/*" }) } | ConvertTo-Json -Compress
     aws s3api put-bucket-policy --bucket $S3_BUCKET --policy $policy --profile $PROFILE | Out-Null
 
     Write-Ok "S3 bucket created"
-} else {
+}
+else {
     Write-Skip "S3 bucket $S3_BUCKET"
 }
 
@@ -304,7 +314,8 @@ if ($LASTEXITCODE -ne 0) {
     #   --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["bedrock:Retrieve","bedrock:RetrieveAndGenerate"],"Resource":"arn:aws:bedrock:us-east-1:<PROD_ACCOUNT>:knowledge-base/<KB_ID>"}]}'
 
     Write-Ok "IAM Role created"
-} else {
+}
+else {
     Write-Skip $LAMBDA_ROLE
 }
 
@@ -332,7 +343,8 @@ if (-not (Test-Path $lambdaZip)) {
     Copy-Item "$PSScriptRoot\..\lambda\sharepointService.js" $staging
     if (Test-Path "$PSScriptRoot\..\lambda\node_modules") {
         Copy-Item "$PSScriptRoot\..\lambda\node_modules" $staging -Recurse
-    } else {
+    }
+    else {
         Push-Location $staging; npm ci --omit=dev; Pop-Location
     }
     Compress-Archive -Path "$staging\*" -DestinationPath $lambdaZip
@@ -344,7 +356,7 @@ if ($LASTEXITCODE -ne 0) {
     Write-Step "Creating Lambda $MAIN_LAMBDA ..."
     aws lambda create-function `
         --function-name $MAIN_LAMBDA `
-        --runtime nodejs20.x `
+        --runtime nodejs22.x `
         --handler index.handler `
         --role $LAMBDA_ROLE_ARN `
         --zip-file "fileb://$lambdaZip" `
@@ -353,7 +365,8 @@ if ($LASTEXITCODE -ne 0) {
         --region $REGION `
         --profile $PROFILE | Out-Null
     aws lambda wait function-active --function-name $MAIN_LAMBDA --profile $PROFILE --region $REGION
-} else {
+}
+else {
     Write-Step "Updating code for $MAIN_LAMBDA ..."
     aws lambda update-function-code --function-name $MAIN_LAMBDA --zip-file "fileb://$lambdaZip" --profile $PROFILE --region $REGION | Out-Null
     aws lambda wait function-updated --function-name $MAIN_LAMBDA --profile $PROFILE --region $REGION
@@ -375,7 +388,8 @@ if (-not (Test-Path $sfZip)) {
     Copy-Item "$PSScriptRoot\..\lambda-salesforce\package.json" $staging
     if (Test-Path "$PSScriptRoot\..\lambda-salesforce\node_modules") {
         Copy-Item "$PSScriptRoot\..\lambda-salesforce\node_modules" $staging -Recurse
-    } else {
+    }
+    else {
         Push-Location $staging; npm ci --omit=dev; Pop-Location
     }
     Compress-Archive -Path "$staging\*" -DestinationPath $sfZip
@@ -386,7 +400,7 @@ if ($LASTEXITCODE -ne 0) {
     Write-Step "Creating Lambda $SF_LAMBDA ..."
     aws lambda create-function `
         --function-name $SF_LAMBDA `
-        --runtime nodejs20.x `
+        --runtime nodejs22.x `
         --handler index.handler `
         --role $LAMBDA_ROLE_ARN `
         --zip-file "fileb://$sfZip" `
@@ -395,7 +409,8 @@ if ($LASTEXITCODE -ne 0) {
         --region $REGION `
         --profile $PROFILE | Out-Null
     aws lambda wait function-active --function-name $SF_LAMBDA --profile $PROFILE --region $REGION
-} else {
+}
+else {
     Write-Step "Updating code for $SF_LAMBDA ..."
     aws lambda update-function-code --function-name $SF_LAMBDA --zip-file "fileb://$sfZip" --profile $PROFILE --region $REGION | Out-Null
     aws lambda wait function-updated --function-name $SF_LAMBDA --profile $PROFILE --region $REGION
@@ -408,9 +423,9 @@ Write-Ok "$SF_LAMBDA"
 
 # -- 4c: Python Lambdas (download zips from test account and redeploy) --
 $pythonLambdas = @(
-    @{ Name = "$APP-GetProjects";   Handler = "index.lambda_handler"; Runtime = "python3.11" },
+    @{ Name = "$APP-GetProjects"; Handler = "index.lambda_handler"; Runtime = "python3.11" },
     @{ Name = "$APP-GetCategories"; Handler = "lambda_temp.get_categories"; Runtime = "python3.11" },
-    @{ Name = "$APP-GetLineItems";  Handler = "lambda_temp.get_lineitems"; Runtime = "python3.11" }
+    @{ Name = "$APP-GetLineItems"; Handler = "lambda_temp.get_lineitems"; Runtime = "python3.11" }
 )
 
 foreach ($fn in $pythonLambdas) {
@@ -421,7 +436,8 @@ foreach ($fn in $pythonLambdas) {
     $codeUrl = aws lambda get-function --function-name $fn.Name --profile megapros-test --region $REGION --query "Code.Location" --output text 2>&1
     if ($LASTEXITCODE -eq 0) {
         Invoke-WebRequest -Uri $codeUrl -OutFile $tmpZip -UseBasicParsing
-    } else {
+    }
+    else {
         Write-Host "  WARNING: Could not download $($fn.Name) from test account. Skipping." -ForegroundColor Yellow
         continue
     }
@@ -439,7 +455,8 @@ foreach ($fn in $pythonLambdas) {
             --region $REGION `
             --profile $PROFILE | Out-Null
         aws lambda wait function-active --function-name $fn.Name --profile $PROFILE --region $REGION
-    } else {
+    }
+    else {
         aws lambda update-function-code --function-name $fn.Name --zip-file "fileb://$tmpZip" --profile $PROFILE --region $REGION | Out-Null
         aws lambda wait function-updated --function-name $fn.Name --profile $PROFILE --region $REGION
     }
@@ -458,7 +475,8 @@ $existingPool = aws cognito-idp list-user-pools --max-results 20 --profile $PROF
 if ($existingPool) {
     $COGNITO_POOL_ID = $existingPool
     Write-Skip "User Pool (ID: $COGNITO_POOL_ID)"
-} else {
+}
+else {
     Write-Step "Creating User Pool..."
     $COGNITO_POOL_ID = aws cognito-idp create-user-pool `
         --pool-name "MaterialsSelectionApp" `
@@ -478,7 +496,8 @@ $existingClient = aws cognito-idp list-user-pool-clients --user-pool-id $COGNITO
 if ($existingClient) {
     $COGNITO_CLIENT_ID = $existingClient
     Write-Skip "App Client (ID: $COGNITO_CLIENT_ID)"
-} else {
+}
+else {
     Write-Step "Creating App Client..."
     $COGNITO_CLIENT_ID = aws cognito-idp create-user-pool-client `
         --user-pool-id $COGNITO_POOL_ID `
@@ -505,7 +524,8 @@ $existingApi = aws apigateway get-rest-apis --profile $PROFILE --region $REGION 
 if ($existingApi) {
     $API_ID = $existingApi
     Write-Skip "REST API (ID: $API_ID)"
-} else {
+}
+else {
     Write-Step "Importing API from spec (aws/api-gateway-export-full.json)..."
 
     # Replace test account number with prod account number in integrations
@@ -562,40 +582,41 @@ $existingDist = aws cloudfront list-distributions --profile $PROFILE `
 if ($existingDist) {
     $CF_DIST_ID = $existingDist
     Write-Skip "CloudFront distribution (ID: $CF_DIST_ID)"
-} else {
+}
+else {
     Write-Step "Creating CloudFront distribution..."
 
     $cfConfig = @{
-        CallerReference = "materials-selection-prod-$(Get-Date -Format 'yyyyMMddHHmmss')"
-        Origins = @{
+        CallerReference      = "materials-selection-prod-$(Get-Date -Format 'yyyyMMddHHmmss')"
+        Origins              = @{
             Quantity = 1
-            Items = @(@{
-                Id = "S3-$S3_BUCKET"
-                DomainName = $S3_WEBSITE_URL
-                CustomOriginConfig = @{
-                    HTTPPort = 80
-                    HTTPSPort = 443
-                    OriginProtocolPolicy = "http-only"
-                }
-            })
+            Items    = @(@{
+                    Id                 = "S3-$S3_BUCKET"
+                    DomainName         = $S3_WEBSITE_URL
+                    CustomOriginConfig = @{
+                        HTTPPort             = 80
+                        HTTPSPort            = 443
+                        OriginProtocolPolicy = "http-only"
+                    }
+                })
         }
         DefaultCacheBehavior = @{
-            TargetOriginId = "S3-$S3_BUCKET"
+            TargetOriginId       = "S3-$S3_BUCKET"
             ViewerProtocolPolicy = "redirect-to-https"
-            CachePolicyId = "658327ea-f89d-4fab-a63d-7e88639e58f6"  # AWS Managed CachingOptimized
-            Compress = $true
-            AllowedMethods = @{ Quantity = 2; Items = @("GET","HEAD") }
+            CachePolicyId        = "658327ea-f89d-4fab-a63d-7e88639e58f6"  # AWS Managed CachingOptimized
+            Compress             = $true
+            AllowedMethods       = @{ Quantity = 2; Items = @("GET", "HEAD") }
         }
         CustomErrorResponses = @{
             Quantity = 2
-            Items = @(
+            Items    = @(
                 @{ ErrorCode = 403; ResponseCode = 200; ResponsePagePath = "/index.html"; ErrorCachingMinTTL = 10 },
                 @{ ErrorCode = 404; ResponseCode = 200; ResponsePagePath = "/index.html"; ErrorCachingMinTTL = 10 }
             )
         }
-        Comment = "materials-selection-prod"
-        Enabled = $true
-        PriceClass = "PriceClass_100"
+        Comment              = "materials-selection-prod"
+        Enabled              = $true
+        PriceClass           = "PriceClass_100"
     } | ConvertTo-Json -Depth 10 -Compress
 
     $tmpCf = "$env:TEMP\cf-distrib-config.json"

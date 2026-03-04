@@ -1,11 +1,12 @@
 # Materials Selection App - Development Status
 
-**Last Updated:** February 24, 2026  
-**Environments:** Test (mpmaterials.apiaconsulting.com) | Production (separate AWS account)
+**Last Updated:** March 4, 2026  
+**Environments:** Test (mpmaterials.apiaconsulting.com) | Production (d377ynyh0ngsji.cloudfront.net)
 
 ## Current Status Summary
 
 ✅ **Working — Test environment (AWS account 634752426026):**
+
 - Full dual-environment deployment pipeline (test + prod are fully independent)
 - All project CRUD operations
 - All product/manufacturer/vendor CRUD operations
@@ -17,9 +18,11 @@
 - All allowance fields increment by 1 (not 0.01)
 
 ✅ **Working — Production environment (AWS account 860601623272):**
+
 - All of the above, independently deployed
 
 ⚠️ **Known Issues:**
+
 - None currently
 
 ---
@@ -27,34 +30,41 @@
 ## Environments & Deployment
 
 ### Test
-| Resource | Value |
-|----------|-------|
-| AWS Account | 634752426026 |
-| API Gateway ID | xrld1hq3e2 (stage: `/prod`) |
-| Cognito User Pool | us-east-1_K72aPw18O |
-| Cognito Client ID | 6h7ebr5r1gqvngrdv5lacfmh3b |
-| S3 Bucket | materials-selection-app-7525 |
-| CloudFront | E2CO2DGE8F4YUE |
-| URL | https://mpmaterials.apiaconsulting.com |
-| AWS Profile | megapros-test |
-| Deploy script | `.\deploy-test.ps1` |
-| Build script | `npm run build:test` (uses `--mode development` → `.env.local` only) |
+
+| Resource          | Value                                                                |
+| ----------------- | -------------------------------------------------------------------- |
+| AWS Account       | 634752426026                                                         |
+| API Gateway ID    | xrld1hq3e2 (stage: `/prod`)                                          |
+| Cognito User Pool | us-east-1_K72aPw18O                                                  |
+| Cognito Client ID | 6h7ebr5r1gqvngrdv5lacfmh3b                                           |
+| S3 Bucket         | materials-selection-app-7525                                         |
+| CloudFront        | E2CO2DGE8F4YUE                                                       |
+| URL               | https://mpmaterials.apiaconsulting.com                               |
+| AWS Profile       | megapros-test                                                        |
+| Lambda Runtime    | nodejs22.x                                                           |
+| Deploy script     | `.\deploy-test.ps1`                                                  |
+| Build script      | `npm run build:test` (uses `--mode development` → `.env.local` only) |
 
 ### Production
-| Resource | Value |
-|----------|-------|
-| AWS Account | 860601623272 |
-| API Gateway ID | 6extgb87v1 (stage: `/prod`) |
-| Cognito User Pool | us-east-1_r52mUYVd5 |
-| Cognito Client ID | 2re1l5aultf5jfr38de3tppbrp |
-| S3 Bucket | materials-selection-prod-3039 |
-| CloudFront | E2PTMMBR8VRR3W |
-| AWS Profile | megapros-prod |
-| Deploy script | `.\deploy-prod.ps1` |
-| Build script | `npm run build` (uses `.env.production`; `.env.local` auto-moved aside) |
+
+| Resource          | Value                                                                   |
+| ----------------- | ----------------------------------------------------------------------- |
+| AWS Account       | 860601623272                                                            |
+| API Gateway ID    | 6extgb87v1 (stage: `/prod`)                                             |
+| Cognito User Pool | us-east-1_r52mUYVd5                                                     |
+| Cognito Client ID | 2re1l5aultf5jfr38de3tppbrp                                              |
+| S3 Bucket         | materials-selection-prod-3039                                           |
+| CloudFront        | E2PTMMBR8VRR3W                                                          |
+| URL               | https://d377ynyh0ngsji.cloudfront.net                                   |
+| AWS Profile       | megapros-prod                                                           |
+| Lambda Runtime    | nodejs22.x                                                              |
+| Deploy script     | `.\deploy-prod.ps1`                                                     |
+| Build script      | `npm run build` (uses `.env.production`; `.env.local` auto-moved aside) |
 
 ### Vite Environment File Priority (CRITICAL)
+
 Vite loads env files highest-priority first:
+
 1. `.env.local` — **overrides everything**, baked into every build on this machine
 2. `.env.production` — used by `npm run build` (prod mode)
 3. `.env.development` — used by `npm run build --mode development`
@@ -65,9 +75,30 @@ exclusively. No human action required.**
 
 ---
 
+## Session Summary — March 4, 2026
+
+### Infrastructure / DevOps
+
+- **Lambda runtime upgraded: nodejs20.x → nodejs22.x** across both environments.
+  - AWS is deprecating Node.js 20.x Lambda support after April 14, 2026.
+  - Both functions upgraded in test, smoke-tested, then upgraded in prod.
+  - No code changes required — Node.js 22 is fully backward-compatible.
+  - `aws/setup-prod-infrastructure.ps1` updated to provision with `nodejs22.x` going forward.
+  - `upgrade-lambda-runtime.ps1` added — idempotent script to upgrade either environment via `-Environment test|prod` parameter.
+- **Production URL confirmed:** https://d377ynyh0ngsji.cloudfront.net (no custom domain configured yet on prod CloudFront distribution `E2PTMMBR8VRR3W`).
+
+### Git Commits (Mar 4)
+
+| Hash | Description |
+| ---- | ----------- |
+| TBD  | Upgrade Lambda runtime from nodejs20.x to nodejs22.x |
+
+---
+
 ## Session Summary — February 24, 2026
 
 ### Features Delivered
+
 - **Allowance field step increment** changed from `0.01` → `1` across all inputs:
   - `CategoryForm.tsx` (standalone category form)
   - `ProjectDetail.tsx` — Add Section modal
@@ -76,43 +107,49 @@ exclusively. No human action required.**
   - `ProjectDetail.tsx` — Inline edit line item row
 
 ### Infrastructure / DevOps
+
 - **Dual-environment deploy pipeline validated end-to-end:**
   - Change deployed to test → verified working → deployed to prod → both confirmed working
 - **`deploy-prod.ps1` hardened:** Now automatically moves `.env.local` aside during build (try/finally ensures it is always restored even on build failure). No more "type YES" prompt — risk is eliminated mechanically.
 - **`build:test` script added** to `package.json`: `tsc -b && vite build --mode development` — ensures test builds never load `.env.production`.
 
 ### Incident Resolved (see [INCIDENT-2026-02-24-TEST-ENV-BROKEN.md](./INCIDENT-2026-02-24-TEST-ENV-BROKEN.md))
+
 - Test site showed "Application Error" after login
 - Root cause: `.env.local` contained a non-existent API Gateway ID (`fiad7hd58j`)
 - Fix: corrected to `xrld1hq3e2/prod` (the original test API, still live)
 - Safeguards added to `.env.local` comments and `deploy-prod.ps1`
 
 ### Git Commits (Feb 24)
-| Hash | Description |
-|------|-------------|
+
+| Hash      | Description                                                    |
+| --------- | -------------------------------------------------------------- |
 | `2679e4e` | Change allowance field increment from 0.01 to 1 (CategoryForm) |
-| `f62639c` | Fix test deploy using wrong env: use --mode development |
-| `e612077` | Revert Promise.allSettled change (issue was config, not code) |
-| `c84d99c` | Change allowance step to 1 in ProjectDetail section modals |
-| `0e89e6f` | deploy-prod: auto-move .env.local aside during build |
-| `5ecb75a` | Change allowance step to 1 in inline add/edit item rows |
+| `f62639c` | Fix test deploy using wrong env: use --mode development        |
+| `e612077` | Revert Promise.allSettled change (issue was config, not code)  |
+| `c84d99c` | Change allowance step to 1 in ProjectDetail section modals     |
+| `0e89e6f` | deploy-prod: auto-move .env.local aside during build           |
+| `5ecb75a` | Change allowance step to 1 in inline add/edit item rows        |
 
 ---
 
 ## Recent Features Added (February 9–24, 2026)
 
 ### Cognito Authentication ✅
+
 - Login page with session persistence (survives page reload)
 - `AuthProvider` / `useAuth` context
 - `ProtectedRoute` guard — redirects to `/login`, preserves intended destination
 - First-login new-password challenge flow
 
 ### PowerPoint Export ✅
+
 - Generates `.pptx` from project detail page
 - Client-side generation using `pptxgenjs`
 - Dynamic sizing, collision detection, error handling
 
 ### Line Item Options (Good/Better/Best) ✅
+
 - Attach product alternatives to line items
 - `ChooseOptionsModal` for selection
 - `lineItemOptionService` backend integration
@@ -122,18 +159,23 @@ exclusively. No human action required.**
 ## Frontend Deployment
 
 ### Test
+
 **S3:** materials-selection-app-7525 | **CF:** E2CO2DGE8F4YUE  
-**Latest bundle:** index-C-RuEMj-.js  
+**Latest bundle:** index-C-RuEMj-.js
+
 ```
 .\deploy-test.ps1
 ```
 
 ### Production
+
 **S3:** materials-selection-prod-3039 | **CF:** E2PTMMBR8VRR3W  
-**Latest bundle:** index-e6cLxuy5.js  
+**Latest bundle:** index-e6cLxuy5.js
+
 ```
 .\deploy-prod.ps1
 ```
+
 Script auto-handles `.env.local` isolation — no manual steps needed.
 
 ---
