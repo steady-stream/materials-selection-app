@@ -148,6 +148,28 @@ const ProjectDetail = () => {
     LineItemOption[]
   >([]);
 
+  // SharePoint link-folder modal state
+  const [showSpLinkModal, setShowSpLinkModal] = useState(false);
+  const [spFolders, setSpFolders] = useState<
+    {
+      id: string;
+      name: string;
+      webUrl: string;
+      driveId: string;
+      siteId: string;
+    }[]
+  >([]);
+  const [spFoldersLoading, setSpFoldersLoading] = useState(false);
+  const [spFoldersError, setSpFoldersError] = useState<string | null>(null);
+  const [spNewFolderName, setSpNewFolderName] = useState("");
+  const [spLinking, setSpLinking] = useState(false);
+  const [spConfig, setSpConfig] = useState<{
+    configured: boolean;
+    siteUrl: string | null;
+    library: string;
+    baseFolder: string;
+  } | null>(null);
+
   useEffect(() => {
     if (id) {
       loadAllData(id);
@@ -988,6 +1010,82 @@ const ProjectDetail = () => {
     setOptionsForLineItem(null);
   };
 
+  // --- SharePoint link-folder handlers ---
+
+  const handleOpenSpLinkModal = async () => {
+    setShowSpLinkModal(true);
+    setSpFoldersError(null);
+    setSpNewFolderName("");
+    setSpFolders([]);
+    setSpConfig(null);
+    setSpFoldersLoading(true);
+    try {
+      // Fetch config + folder list in parallel
+      const [configData, folderData] = await Promise.all([
+        projectService.getSharepointConfig(),
+        projectService.listSharepointFolders(project!.id),
+      ]);
+      setSpConfig(configData);
+      setSpFolders(folderData.folders);
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Failed to load SharePoint folders";
+      setSpFoldersError(msg);
+    } finally {
+      setSpFoldersLoading(false);
+    }
+  };
+
+  const handleLinkExistingFolder = async (folder: {
+    id: string;
+    name: string;
+    webUrl: string;
+    driveId: string;
+    siteId: string;
+  }) => {
+    if (!project) return;
+    setSpLinking(true);
+    setSpFoldersError(null);
+    try {
+      const updated = await projectService.linkSharepointFolder(project.id, {
+        folderId: folder.id,
+        folderName: folder.name,
+        driveId: folder.driveId,
+        siteId: folder.siteId,
+        folderUrl: folder.webUrl,
+      });
+      setProject(updated);
+      setShowSpLinkModal(false);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to link folder";
+      setSpFoldersError(msg);
+    } finally {
+      setSpLinking(false);
+    }
+  };
+
+  const handleCreateAndLinkFolder = async () => {
+    if (!project || !spNewFolderName.trim()) return;
+    setSpLinking(true);
+    setSpFoldersError(null);
+    try {
+      const updated = await projectService.linkSharepointFolder(project.id, {
+        createNew: true,
+        folderName: spNewFolderName.trim(),
+      });
+      setProject(updated);
+      setShowSpLinkModal(false);
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : "Failed to create folder";
+      setSpFoldersError(msg);
+    } finally {
+      setSpLinking(false);
+    }
+  };
+
   // Check if a line item has unselected options
   const hasUnselectedOptions = (lineItemId: string): boolean => {
     const options = allLineItemOptions.filter(
@@ -1586,12 +1684,19 @@ const ProjectDetail = () => {
               >
                 📊 Export PowerPoint
               </button>
-              {project.sharepointFolderId && project.sharepointDriveId && (
+              {project.sharepointFolderId && project.sharepointDriveId ? (
                 <button
                   onClick={() => setShowDocumentsModal(true)}
                   className="bg-blue-600 text-white px-2 py-1 rounded text-xs hover:bg-blue-700"
                 >
                   📄 Documents
+                </button>
+              ) : (
+                <button
+                  onClick={handleOpenSpLinkModal}
+                  className="bg-gray-200 text-gray-700 px-2 py-1 rounded text-xs hover:bg-gray-300 border border-gray-300"
+                >
+                  🔗 Link SharePoint
                 </button>
               )}
             </div>
@@ -5143,6 +5248,131 @@ const ProjectDetail = () => {
           onClose={handleCloseOptionsModal}
           onOptionsChanged={handleOptionsChanged}
         />
+      )}
+
+      {/* Link SharePoint Folder Modal */}
+      {showSpLinkModal && project && (
+        <div className="fixed inset-0 flex items-center justify-center p-4 z-50">
+          <div
+            className="fixed inset-0 bg-gray-500 bg-opacity-50"
+            onClick={() => !spLinking && setShowSpLinkModal(false)}
+          />
+          <div className="relative bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">
+                  Link SharePoint Folder
+                </h2>
+                {spConfig?.siteUrl && (
+                  <p
+                    className="text-xs text-gray-400 mt-0.5 truncate max-w-sm"
+                    title={spConfig.siteUrl}
+                  >
+                    {spConfig.siteUrl} / {spConfig.library} /{" "}
+                    {spConfig.baseFolder}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => setShowSpLinkModal(false)}
+                disabled={spLinking}
+                className="text-gray-400 hover:text-gray-600 text-2xl leading-none disabled:opacity-50"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 px-6 py-4 space-y-5">
+              {spFoldersError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 rounded px-3 py-2 text-sm">
+                  {spFoldersError}
+                </div>
+              )}
+
+              {/* Create new folder */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                  Create a new folder
+                </h3>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={spNewFolderName}
+                    onChange={(e) => setSpNewFolderName(e.target.value)}
+                    placeholder="Folder name"
+                    disabled={spLinking}
+                    className="flex-1 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-100"
+                    onKeyDown={(e) =>
+                      e.key === "Enter" && handleCreateAndLinkFolder()
+                    }
+                  />
+                  <button
+                    onClick={handleCreateAndLinkFolder}
+                    disabled={!spNewFolderName.trim() || spLinking}
+                    className="bg-indigo-600 text-white px-3 py-1.5 rounded text-sm hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    {spLinking ? "Creating…" : "Create & Link"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-200" />
+                </div>
+                <div className="relative flex justify-center text-xs text-gray-500">
+                  <span className="bg-white px-2">
+                    or select an existing folder
+                  </span>
+                </div>
+              </div>
+
+              {/* Existing folders list */}
+              {spFoldersLoading ? (
+                <div className="text-center py-6 text-sm text-gray-500">
+                  Loading folders…
+                </div>
+              ) : spFolders.length === 0 && !spFoldersError ? (
+                <div className="text-center py-6 text-sm text-gray-400">
+                  No existing folders found.
+                </div>
+              ) : (
+                <ul className="divide-y divide-gray-100 border border-gray-200 rounded-md overflow-hidden">
+                  {spFolders.map((folder) => (
+                    <li
+                      key={folder.id}
+                      className="flex items-center justify-between px-4 py-2 hover:bg-gray-50"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-base">📁</span>
+                        <span className="text-sm text-gray-800 truncate">
+                          {folder.name}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => handleLinkExistingFolder(folder)}
+                        disabled={spLinking}
+                        className="ml-4 flex-shrink-0 text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {spLinking ? "Linking…" : "Link"}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="px-6 py-3 border-t border-gray-200 flex justify-end">
+              <button
+                onClick={() => setShowSpLinkModal(false)}
+                disabled={spLinking}
+                className="text-sm text-gray-600 hover:text-gray-900 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Documents Modal */}

@@ -1,6 +1,6 @@
 # Materials Selection App - Development Status
 
-**Last Updated:** March 4, 2026  
+**Last Updated:** March 9, 2026  
 **Environments:** Test (mpmaterials.apiaconsulting.com) | Production (d377ynyh0ngsji.cloudfront.net)
 
 ## Current Status Summary
@@ -16,14 +16,18 @@
 - PowerPoint export from project detail
 - Line item options (Good/Better/Best alternatives)
 - All allowance fields increment by 1 (not 0.01)
+- **SharePoint manual folder link** — "Link SharePoint" button on Project Detail;
+  browse existing folders in `ProjectFolders` base dir or create a new named folder
 
 ✅ **Working — Production environment (AWS account 860601623272):**
 
-- All of the above, independently deployed
+- All of the above **except SharePoint manual link** (not yet deployed to prod —
+  requires API Gateway route additions before Lambda/frontend deploy)
 
-⚠️ **Known Issues:**
+⚠️ **Known Issues / Pending:**
 
-- None currently
+- SharePoint changes not yet deployed to production (see [SHAREPOINT_MANUAL_LINK_2026-03-09.md](./SHAREPOINT_MANUAL_LINK_2026-03-09.md))
+- Lambda monolith refactor planned but not started (see [LAMBDA_REFACTOR_PLAN.md](./LAMBDA_REFACTOR_PLAN.md))
 
 ---
 
@@ -75,6 +79,39 @@ exclusively. No human action required.**
 
 ---
 
+## Session Summary — March 9, 2026
+
+### Features Delivered
+
+- **SharePoint manual folder link** — removed automatic folder creation on project save;
+  added "Link SharePoint" button on Project Detail that opens a modal allowing the user
+  to browse existing folders in the SharePoint base directory or create a new named folder.
+  See [SHAREPOINT_MANUAL_LINK_2026-03-09.md](./SHAREPOINT_MANUAL_LINK_2026-03-09.md) for full details.
+
+### Infrastructure / DevOps
+
+- **3 new API Gateway routes added** to test REST API `xrld1hq3e2` (stage `prod`):
+  - `GET /sharepoint/config` (resource `2zxkl1`)
+  - `GET /projects/{projectId}/sharepoint/folders` (resource `nod7n9`)
+  - `POST /projects/{projectId}/sharepoint/link` (resource `r2t74e`)
+- **Lambda deployed to test** via manual zip upload (console) — includes both
+  `index.js` and `sharepointService.js` changes.
+- **Frontend deployed to test** via `.\deploy-test.ps1` — CloudFront invalidation `IDNZME2W1UQI0U2DMXYL03VMV4`.
+
+### Planning
+
+- **Lambda refactor plan documented:** [LAMBDA_REFACTOR_PLAN.md](./LAMBDA_REFACTOR_PLAN.md) —
+  split monolithic `MaterialsSelection-API` into 5 domain Lambdas to reduce deploy size
+  and improve maintainability. **Not yet implemented.**
+
+### Git Commits (Mar 9)
+
+| Hash | Description |
+|---|---|
+| *(this commit)* | SharePoint manual folder link feature + Lambda refactor plan |
+
+---
+
 ## Session Summary — March 4, 2026
 
 ### Infrastructure / DevOps
@@ -89,8 +126,8 @@ exclusively. No human action required.**
 
 ### Git Commits (Mar 4)
 
-| Hash | Description |
-| ---- | ----------- |
+| Hash      | Description                                          |
+| --------- | ---------------------------------------------------- |
 | `e7aaf4e` | Upgrade Lambda runtime from nodejs20.x to nodejs22.x |
 
 ---

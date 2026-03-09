@@ -5,6 +5,15 @@ import type {
 } from "../types";
 import apiClient from "./api";
 
+// Local type for SharePoint folder entries returned by the folder-browser endpoint
+interface SharepointFolder {
+  id: string;
+  name: string;
+  webUrl: string;
+  driveId: string;
+  siteId: string;
+}
+
 export const projectService = {
   // Get all projects
   getAll: async (): Promise<Project[]> => {
@@ -58,5 +67,57 @@ export const projectService = {
   // Delete file from project SharePoint folder
   deleteFile: async (id: string, fileId: string): Promise<void> => {
     await apiClient.delete(`/projects/${id}/files/${fileId}`);
+  },
+
+  // List available folders in the SharePoint base folder for the user to pick from
+  listSharepointFolders: async (
+    id: string,
+  ): Promise<{
+    folders: SharepointFolder[];
+    driveId: string;
+    siteId: string;
+  }> => {
+    const response = await apiClient.get<{
+      folders: SharepointFolder[];
+      driveId: string;
+      siteId: string;
+    }>(`/projects/${id}/sharepoint/folders`);
+    return response.data;
+  },
+
+  // Link an existing or newly created SharePoint folder to the project
+  linkSharepointFolder: async (
+    id: string,
+    data:
+      | {
+          folderId: string;
+          folderName: string;
+          driveId: string;
+          siteId: string;
+          folderUrl: string;
+        }
+      | { createNew: true; folderName: string },
+  ): Promise<Project> => {
+    const response = await apiClient.post<Project>(
+      `/projects/${id}/sharepoint/link`,
+      data,
+    );
+    return response.data;
+  },
+
+  // Get the non-secret SharePoint configuration from this Lambda environment
+  getSharepointConfig: async (): Promise<{
+    configured: boolean;
+    siteUrl: string | null;
+    library: string;
+    baseFolder: string;
+  }> => {
+    const response = await apiClient.get("/sharepoint/config");
+    return response.data as {
+      configured: boolean;
+      siteUrl: string | null;
+      library: string;
+      baseFolder: string;
+    };
   },
 };

@@ -14,6 +14,8 @@ const {
   getProjectFolderContents,
   uploadFileToProjectFolder,
   deleteFileFromProjectFolder,
+  listFoldersInBaseDir,
+  createFolderWithName,
 } = require("./sharepointService");
 const {
   BedrockRuntimeClient,
@@ -101,6 +103,26 @@ exports.handler = async (event) => {
       const id = path.split("/")[2];
       const fileId = path.split("/")[4];
       return await deleteProjectFile(id, fileId);
+    }
+    // SharePoint folder-browser and link routes
+    if (
+      path.match(/^\/projects\/[^\/]+\/sharepoint\/folders$/) &&
+      method === "GET"
+    ) {
+      const id = path.split("/")[2];
+      return await listSharepointFolders(id);
+    }
+    if (
+      path.match(/^\/projects\/[^\/]+\/sharepoint\/link$/) &&
+      method === "POST"
+    ) {
+      const id = path.split("/")[2];
+      return await linkSharepointFolder(id, JSON.parse(event.body));
+    }
+    // Return non-secret SharePoint configuration (site URL, library, base folder)
+    // so the frontend can display what environment it's connecting to
+    if (path === "/sharepoint/config" && method === "GET") {
+      return await getSharepointConfig();
     }
 
     // AI routes
@@ -397,32 +419,7 @@ async function createProject(data) {
     updatedAt: new Date().toISOString(),
   };
 
-  // Create SharePoint folder if configured
-  if (project.name && process.env.SHAREPOINT_SITE_URL) {
-    try {
-      console.log(`Creating SharePoint folder for project: ${project.name}`);
-      const folderInfo = await createProjectFolder(
-        project.id,
-        project.name,
-        project.type,
-        project.customerName,
-      );
-
-      // Add SharePoint info to project
-      project.sharepointFolderId = folderInfo.id;
-      project.sharepointFolderUrl = folderInfo.webUrl;
-      project.sharepointDriveId = folderInfo.driveId;
-      project.sharepointSiteId = folderInfo.siteId;
-
-      console.log(`SharePoint folder created: ${folderInfo.webUrl}`);
-    } catch (error) {
-      console.error("SharePoint folder creation failed:", error.message);
-      console.error("Stack:", error.stack);
-      // Continue with project creation even if SharePoint fails
-      // Don't throw - project creation should succeed regardless
-    }
-  }
-
+  // SharePoint folder is NOT created automatically — user links from Project Detail
   await ddb.send(new PutCommand({ TableName: PROJECTS_TABLE, Item: project }));
   return { statusCode: 201, headers, body: JSON.stringify(project) };
 }
@@ -616,6 +613,149 @@ async function deleteProjectFile(id, fileId) {
       headers,
       body: JSON.stringify({
         message: "Failed to delete file from SharePoint",
+        error: error.message,
+      }),
+    };
+  }
+}
+
+/**
+ * Return non-secret SharePoint configuration so the UI can show which
+ * environment (tenant / site / library) it is connected to.
+ * Secrets (clientId, clientSecret, tenantId) are intentionally omitted.
+ */
+async function getSharepointConfig() {
+  const configured =
+    !!process.env.SHAREPOINT_SITE_URL && !!process.env.AZURE_TENANT_ID;
+  return {
+    statusCode: 200,
+    headers,
+    body: JSON.stringify({
+      configured,
+      siteUrl: process.env.SHAREPOINT_SITE_URL || null,
+      library: process.env.SHAREPOINT_LIBRARY || "Projects",
+      baseFolder: process.env.SHAREPOINT_BASE_FOLDER || "ProjectFolders",
+    }),
+  };
+}
+
+/**
+ * List available SharePoint folders so the user can pick one to link.
+ * Returns all subfolders of SHAREPOINT_BASE_FOLDER plus driveId/siteId for linking.
+ */
+async function listSharepointFolders(id) {
+  const result = await ddb.send(
+    new GetCommand({ TableName: PROJECTS_TABLE, Key: { id } }),
+  );
+  if (!result.Item) {
+    return {
+      statusCode: 404,
+      headers,
+      body: JSON.stringify({ message: "Project not found" }),
+    };
+  }
+
+  if (!process.env.SHAREPOINT_SITE_URL) {
+    return {
+      statusCode: 400,
+      headers,
+      body: JSON.stringify({
+        message: "SharePoint is not configured for this environment",
+      }),
+    };
+  }
+
+  try {
+    const data = await listFoldersInBaseDir();
+    return { statusCode: 200, headers, body: JSON.stringify(data) };
+  } catch (error) {
+    console.error("Error listing SharePoint folders:", error);
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({
+        message: "Failed to list SharePoint folders",
+        error: error.message,
+      }),
+    };
+  }
+}
+
+/**
+ * Link a SharePoint folder to a project.
+ * Body options:
+ *   { folderId, folderName, driveId, siteId, folderUrl } — link an existing folder
+ *   { createNew: true, folderName }                      — create a new folder with the given name
+ */
+async function linkSharepointFolder(id, data) {
+  const result = await ddb.send(
+    new GetCommand({ TableName: PROJECTS_TABLE, Key: { id } }),
+  );
+  if (!result.Item) {
+    return {
+      statusCode: 404,
+      headers,
+      body: JSON.stringify({ message: "Project not found" }),
+    };
+  }
+
+  if (!process.env.SHAREPOINT_SITE_URL) {
+    return {
+      statusCode: 400,
+      headers,
+      body: JSON.stringify({
+        message: "SharePoint is not configured for this environment",
+      }),
+    };
+  }
+
+  const project = result.Item;
+
+  try {
+    let folderInfo;
+    if (data.createNew && data.folderName) {
+      // User wants a brand-new folder with their chosen name
+      folderInfo = await createFolderWithName(data.folderName);
+    } else if (data.folderId && data.driveId && data.siteId) {
+      // User picked an existing folder from the browser list
+      folderInfo = {
+        id: data.folderId,
+        name: data.folderName || "",
+        webUrl: data.folderUrl || "",
+        driveId: data.driveId,
+        siteId: data.siteId,
+      };
+    } else {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({
+          message:
+            "Provide either createNew+folderName, or folderId+driveId+siteId",
+        }),
+      };
+    }
+
+    const updatedProject = {
+      ...project,
+      sharepointFolderId: folderInfo.id,
+      sharepointFolderUrl: folderInfo.webUrl,
+      sharepointDriveId: folderInfo.driveId,
+      sharepointSiteId: folderInfo.siteId,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await ddb.send(
+      new PutCommand({ TableName: PROJECTS_TABLE, Item: updatedProject }),
+    );
+    return { statusCode: 200, headers, body: JSON.stringify(updatedProject) };
+  } catch (error) {
+    console.error("Error linking SharePoint folder:", error);
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({
+        message: "Failed to link SharePoint folder",
         error: error.message,
       }),
     };

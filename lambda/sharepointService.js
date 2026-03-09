@@ -297,9 +297,100 @@ async function deleteFileFromProjectFolder(driveId, fileId) {
   await client.api(`/drives/${driveId}/items/${fileId}`).delete();
 }
 
+/**
+ * List all existing folders in the base SharePoint folder.
+ * Called when the user wants to browse and link an existing folder.
+ * @returns {Promise<{folders: Array<{id,name,webUrl,driveId,siteId}>, driveId, siteId}>}
+ */
+async function listFoldersInBaseDir() {
+  const siteUrl = process.env.SHAREPOINT_SITE_URL;
+  const libraryName = process.env.SHAREPOINT_LIBRARY || "Projects";
+  const baseFolderName = process.env.SHAREPOINT_BASE_FOLDER || "ProjectFolders";
+
+  if (!siteUrl) {
+    throw new Error(
+      "SharePoint configuration incomplete: SHAREPOINT_SITE_URL not set",
+    );
+  }
+
+  const client = await getGraphClient();
+  const siteId = await getSiteId(client, siteUrl);
+  const driveId = await getDriveId(client, siteId, libraryName);
+
+  // Creates the base folder if it doesn't exist yet
+  await ensureBaseFolderExists(client, driveId, baseFolderName);
+
+  const children = await client
+    .api(`/drives/${driveId}/root:/${baseFolderName}:/children`)
+    .get();
+
+  const folders = (children.value || [])
+    .filter((item) => item.folder)
+    .map((item) => ({
+      id: item.id,
+      name: item.name,
+      webUrl: item.webUrl,
+      driveId,
+      siteId,
+    }));
+
+  return { folders, driveId, siteId };
+}
+
+/**
+ * Create a folder using the exact name supplied by the user (instead of the
+ * auto-generated ProjectName-Type-Customer convention).
+ * @param {string} folderName - Desired folder name (will be sanitized)
+ * @returns {Promise<{id,name,webUrl,driveId,siteId}>}
+ */
+async function createFolderWithName(folderName) {
+  const siteUrl = process.env.SHAREPOINT_SITE_URL;
+  const libraryName = process.env.SHAREPOINT_LIBRARY || "Projects";
+  const baseFolderName = process.env.SHAREPOINT_BASE_FOLDER || "ProjectFolders";
+
+  if (!siteUrl) {
+    throw new Error(
+      "SharePoint configuration incomplete: SHAREPOINT_SITE_URL not set",
+    );
+  }
+
+  const sanitized = sanitizeFolderName(folderName);
+  if (!sanitized) {
+    throw new Error("Invalid folder name after sanitization");
+  }
+
+  const client = await getGraphClient();
+  const siteId = await getSiteId(client, siteUrl);
+  const driveId = await getDriveId(client, siteId, libraryName);
+
+  await ensureBaseFolderExists(client, driveId, baseFolderName);
+
+  const newFolder = await client
+    .api(`/drives/${driveId}/root:/${baseFolderName}:/children`)
+    .post({
+      name: sanitized,
+      folder: {},
+      "@microsoft.graph.conflictBehavior": "rename",
+    });
+
+  console.log(
+    `SharePoint: Created folder '${newFolder.name}' - ${newFolder.webUrl}`,
+  );
+
+  return {
+    id: newFolder.id,
+    name: newFolder.name,
+    webUrl: newFolder.webUrl,
+    driveId,
+    siteId,
+  };
+}
+
 module.exports = {
   createProjectFolder,
   getProjectFolderContents,
   uploadFileToProjectFolder,
   deleteFileFromProjectFolder,
+  listFoldersInBaseDir,
+  createFolderWithName,
 };
