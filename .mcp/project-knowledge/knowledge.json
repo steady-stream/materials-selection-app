@@ -1,0 +1,140 @@
+{
+  "projectInfo": {
+    "name": "Materials Selection App",
+    "description": "Web application for managing materials selection with AWS backend (Lambda, DynamoDB, API Gateway)",
+    "techStack": [
+      "React",
+      "TypeScript",
+      "Vite",
+      "AWS Lambda",
+      "DynamoDB",
+      "API Gateway",
+      "S3",
+      "CloudFront",
+      "SharePoint Integration"
+    ],
+    "architecture": [
+      "Serverless (AWS Lambda + DynamoDB)",
+      "REST API via API Gateway",
+      "Single Page Application (SPA)",
+      "Static hosting on S3 with CloudFront"
+    ]
+  },
+  "developerPreferences": {
+    "experience": "35+ years",
+    "preferredLanguages": ["TypeScript", "Python", "PowerShell"],
+    "codeStyle": [
+      "Functional components and hooks for React",
+      "Explicit error handling - no silent failures",
+      "Modern JavaScript features (async/await, destructuring, optional chaining)",
+      "Clear comments explaining 'why' not 'what' for non-obvious code"
+    ],
+    "patterns": [
+      "Serverless patterns (Lambda, DynamoDB) for cost efficiency",
+      "Production-ready solutions over theoretical perfection",
+      "Expert-level guidance without over-explaining basics"
+    ]
+  },
+  "architectureDecisions": [
+    {
+      "date": "2026-02-11",
+      "decision": "Use DynamoDB for all data storage",
+      "reasoning": "Cost-effective serverless database, fits well with Lambda architecture, no server management",
+      "tags": ["database", "serverless", "aws"]
+    },
+    {
+      "date": "2026-02-11",
+      "decision": "Deploy static site to S3 + CloudFront",
+      "reasoning": "Low cost, high performance, simple deployment pipeline",
+      "tags": ["deployment", "frontend", "aws"]
+    }
+  ],
+  "apiEndpoints": [
+    {
+      "name": "Projects API",
+      "url": "https://[api-id].execute-api.us-east-1.amazonaws.com/prod/projects",
+      "method": "GET/POST",
+      "purpose": "Manage project records"
+    },
+    {
+      "name": "Line Items API",
+      "url": "https://[api-id].execute-api.us-east-1.amazonaws.com/prod/lineitems",
+      "method": "GET/POST/PUT/DELETE",
+      "purpose": "Manage line items within categories"
+    },
+    {
+      "name": "Product Vendors API",
+      "url": "https://[api-id].execute-api.us-east-1.amazonaws.com/prod/product-vendors",
+      "method": "GET/POST/PUT/DELETE",
+      "purpose": "Manage product-vendor relationships"
+    }
+  ],
+  "commonIssues": [
+    {
+      "issue": "CORS errors when calling API Gateway from localhost",
+      "solution": "Ensure CORS is properly configured on API Gateway with OPTIONS method and correct headers. Use cors-params.json template.",
+      "lastEncountered": "2026-02-11"
+    }
+  ],
+  "developmentNotes": [
+    {
+      "date": "2026-02-11",
+      "note": "JSON-based knowledge system set up for cross-session persistence with PowerShell helper scripts. Can be upgraded to full MCP when SDK becomes available.",
+      "category": "tooling"
+    },
+    {
+      "date": "2026-02-13",
+      "note": "Product import tool created for bulk importing products from CSV with automatic vendor association creation. Supports dry-run validation, URL checking, and S3 image upload.",
+      "category": "tooling"
+    },
+    {
+      "date": "2026-02-13",
+      "note": "Bedrock Knowledge Base and OpenSearch Serverless collection deleted to save $5.77/day (~$173/month). Full configuration documented in docs/BEDROCK_OPENSEARCH_CONFIGURATION.md for easy recreation when AI features are ready for testing. IAM role preserved for reuse.",
+      "category": "cost-optimization"
+    }
+  ],
+  "tools": [
+    {
+      "name": "Product Import Tool",
+      "file": "import_products_from_csv.py",
+      "purpose": "Bulk import products from CSV into DynamoDB",
+      "documentation": "docs/PRODUCT_IMPORT_GUIDE.md",
+      "features": [
+        "CSV template with all product fields",
+        "Automatic vendor association creation (primaryVendor, vendorSku, vendorCost)",
+        "Manufacturer and vendor name validation",
+        "Optional URL validation",
+        "Optional S3 image upload and hosting",
+        "Dry-run mode for testing",
+        "Colored terminal output"
+      ],
+      "usage": "python import_products_from_csv.py <csv-file> [--dry-run] [--upload-images] [--validate-urls]",
+      "template": "product-import-template.csv",
+      "created": "2026-02-13"
+    }
+  ],
+  "dataModel": {
+    "tables": [
+      "MaterialsSelection-Projects",
+      "MaterialsSelection-Categories",
+      "MaterialsSelection-LineItems",
+      "MaterialsSelection-Products",
+      "MaterialsSelection-Manufacturers",
+      "MaterialsSelection-Vendors",
+      "MaterialsSelection-ProductVendors",
+      "MaterialsSelection-Orders",
+      "MaterialsSelection-OrderItems",
+      "MaterialsSelection-Receipts"
+    ],
+    "namingConvention": "MaterialsSelection-TableName (hyphen format, NOT underscore)",
+    "obsoleteTables": [
+      "MaterialsSelection_Projects",
+      "MaterialsSelection_Categories",
+      "MaterialsSelection_LineItems",
+      "MaterialsSelection_Manufacturers",
+      "MaterialsSelection_Products",
+      "MaterialsSelection_Vendors"
+    ],
+    "obsoleteTablesNote": "Underscore format tables are obsolete and can be safely deleted"
+  }
+}
