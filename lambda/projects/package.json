@@ -1,0 +1,12 @@
+{
+  "name": "materials-selection-projects-lambda",
+  "version": "1.0.0",
+  "description": "Projects + SharePoint API Lambda",
+  "main": "index.js",
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.x",
+    "@aws-sdk/lib-dynamodb": "^3.x",
+    "@microsoft/microsoft-graph-client": "^3.0.7",
+    "isomorphic-fetch": "^3.0.0"
+  }
+}

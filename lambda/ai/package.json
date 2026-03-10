@@ -1,0 +1,12 @@
+{
+  "name": "materials-selection-ai-lambda",
+  "version": "1.0.0",
+  "description": "AI Chat and Knowledge Base API Lambda",
+  "main": "index.js",
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.x",
+    "@aws-sdk/lib-dynamodb": "^3.x",
+    "@aws-sdk/client-bedrock-runtime": "^3.x",
+    "@aws-sdk/client-bedrock-agent-runtime": "^3.x"
+  }
+}

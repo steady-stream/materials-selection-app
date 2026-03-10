@@ -20,6 +20,7 @@ a manual "Link SharePoint" flow initiated by the user from the Project Detail pa
 ## Files Changed
 
 ### `lambda/index.js`
+
 - **Removed** the auto-create block inside `createProject()` that called
   `createProjectFolder()` whenever `project.name` and `SHAREPOINT_SITE_URL` were set.
 - **Added** three new handler functions:
@@ -36,6 +37,7 @@ a manual "Link SharePoint" flow initiated by the user from the Project Detail pa
   - `POST /projects/:id/sharepoint/link`
 
 ### `lambda/sharepointService.js`
+
 - **Added** `listFoldersInBaseDir()` — lists all child folders inside `SHAREPOINT_BASE_FOLDER`
   via the Microsoft Graph API. Returns `{ folders, driveId, siteId }`.
 - **Added** `createFolderWithName(folderName)` — creates a new folder under
@@ -43,12 +45,14 @@ a manual "Link SharePoint" flow initiated by the user from the Project Detail pa
 - Updated `module.exports` to include both new functions.
 
 ### `src/services/projectService.ts`
+
 - Added `SharepointFolder` interface `{ id, name, webUrl, driveId, siteId }`.
 - Added `listSharepointFolders(id)` → `GET /projects/:id/sharepoint/folders`
 - Added `linkSharepointFolder(id, data)` → `POST /projects/:id/sharepoint/link`
 - Added `getSharepointConfig()` → `GET /sharepoint/config`
 
 ### `src/components/ProjectDetail.tsx`
+
 - Added state: `showSpLinkModal`, `spFolders`, `spFoldersLoading`, `spFoldersError`,
   `spNewFolderName`, `spLinking`, `spConfig`.
 - **Documents button logic changed:** When a project has no `sharepointFolderId`, shows
@@ -65,13 +69,13 @@ a manual "Link SharePoint" flow initiated by the user from the Project Detail pa
 
 Three new resources were added to REST API `xrld1hq3e2`:
 
-| Resource ID | Path | Methods |
-|---|---|---|
-| `oqym0n` | `/sharepoint` | (parent only) |
-| `2zxkl1` | `/sharepoint/config` | GET, OPTIONS |
-| `n2t22w` | `/projects/{projectId}/sharepoint` | (parent only) |
-| `nod7n9` | `/projects/{projectId}/sharepoint/folders` | GET, OPTIONS |
-| `r2t74e` | `/projects/{projectId}/sharepoint/link` | POST, OPTIONS |
+| Resource ID | Path                                       | Methods       |
+| ----------- | ------------------------------------------ | ------------- |
+| `oqym0n`    | `/sharepoint`                              | (parent only) |
+| `2zxkl1`    | `/sharepoint/config`                       | GET, OPTIONS  |
+| `n2t22w`    | `/projects/{projectId}/sharepoint`         | (parent only) |
+| `nod7n9`    | `/projects/{projectId}/sharepoint/folders` | GET, OPTIONS  |
+| `r2t74e`    | `/projects/{projectId}/sharepoint/link`    | POST, OPTIONS |
 
 All GET/POST methods use `AWS_PROXY` integration → `MaterialsSelection-API`.
 All OPTIONS methods use `MOCK` integration with standard CORS response headers.
@@ -85,13 +89,13 @@ Deployed to stage `prod` — deployment ID `62t8fo`.
 
 ## SharePoint Connectivity (test environment — verified March 9, 2026)
 
-| Setting | Value |
-|---|---|
-| Tenant | `apiaconsulting` (ID: `2ea2b9df-669a-48d1-b2c2-15411ba08071`) |
-| App (Client ID) | `24b3320a-35c0-4f2b-a6d2-99a146e62468` |
-| Site | `https://apiaconsulting.sharepoint.com/sites/MegaPros360` |
-| Document Library | `Projects` |
-| Base Folder | `ProjectFolders` |
+| Setting          | Value                                                         |
+| ---------------- | ------------------------------------------------------------- |
+| Tenant           | `apiaconsulting` (ID: `2ea2b9df-669a-48d1-b2c2-15411ba08071`) |
+| App (Client ID)  | `24b3320a-35c0-4f2b-a6d2-99a146e62468`                        |
+| Site             | `https://apiaconsulting.sharepoint.com/sites/MegaPros360`     |
+| Document Library | `Projects`                                                    |
+| Base Folder      | `ProjectFolders`                                              |
 
 All credentials are stored as Lambda environment variables (`SHAREPOINT_*`).
 Auth, site access, library, and base folder all confirmed working.

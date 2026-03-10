@@ -1,6 +1,7 @@
 # Lambda Refactoring Plan — Break Up Monolith
 
-**Status:** Planned — not yet implemented  
+**Status:** ✅ COMPLETE — deployed to TEST (March 9, 2026)  
+**Production:** Not yet deployed — pending extended testing  
 **Created:** March 9, 2026
 
 ---
@@ -12,6 +13,7 @@ covering every domain: Projects, SharePoint, AI/Bedrock, Categories, Line Items,
 Catalog (Vendors/Manufacturers/Products), Orders, and more.
 
 **Consequences:**
+
 - Every deploy — even a one-line DynamoDB fix — requires zipping all dependencies
   together: DynamoDB SDK + Bedrock SDK + MS Graph SDK + isomorphic-fetch = ~10MB zip
 - A bug in any one domain can take down the entire API
@@ -83,13 +85,13 @@ lambda/
 
 ## Estimated Deployment Size Impact
 
-| Lambda | Dependencies | Approx. zip size |
-|---|---|---|
-| `Projects-API` | DynamoDB SDK + MS Graph SDK | ~4 MB |
-| `Core-API` | DynamoDB SDK only | ~0.5 MB |
-| `Catalog-API` | DynamoDB SDK only | ~0.5 MB |
-| `Orders-API` | DynamoDB SDK only | ~0.5 MB |
-| `AI-API` | DynamoDB SDK + Bedrock SDKs | ~3 MB |
+| Lambda         | Dependencies                | Approx. zip size |
+| -------------- | --------------------------- | ---------------- |
+| `Projects-API` | DynamoDB SDK + MS Graph SDK | ~4 MB            |
+| `Core-API`     | DynamoDB SDK only           | ~0.5 MB          |
+| `Catalog-API`  | DynamoDB SDK only           | ~0.5 MB          |
+| `Orders-API`   | DynamoDB SDK only           | ~0.5 MB          |
+| `AI-API`       | DynamoDB SDK + Bedrock SDKs | ~3 MB            |
 
 Current monolith zip: ~10 MB. Most common deployments (any non-AI, non-SharePoint
 bug fix) drop from ~10 MB to ~0.5 MB.
@@ -107,6 +109,7 @@ second declaration. The duplicates should be removed as part of the Orders Lambd
 ## API Gateway Changes Required
 
 For each new Lambda:
+
 1. Create the Lambda function (copy IAM role from existing `MaterialsSelection-API`)
 2. Update API Gateway route integrations to point to the new Lambda ARN
 3. Add Lambda resource-based policy (`lambda:InvokeFunction`) for API Gateway
@@ -144,3 +147,76 @@ Each Lambda should be deployed to test first and smoke-tested before proceeding 
 - API Gateway URL — same endpoint
 - Salesforce Lambda — already separate
 - Route paths — all identical
+
+---
+
+## Implementation Record — March 9, 2026
+
+### AWS Resources Created (TEST — account `634752426026`)
+
+| Lambda Name                       | ARN (partial)                  | Created      |
+| --------------------------------- | ------------------------------ | ------------ |
+| `MaterialsSelection-Projects-API` | `...634752426026:function:...` | 21:35:33 UTC |
+| `MaterialsSelection-Core-API`     | `...634752426026:function:...` | 21:36:06 UTC |
+| `MaterialsSelection-Catalog-API`  | `...634752426026:function:...` | 21:37:02 UTC |
+| `MaterialsSelection-Orders-API`   | `...634752426026:function:...` | 21:37:35 UTC |
+| `MaterialsSelection-AI-API`       | `...634752426026:function:...` | 21:38:32 UTC |
+
+- **IAM Role:** `arn:aws:iam::634752426026:role/MaterialsSelection-Lambda-Role` (reused from monolith)
+- **Runtime:** `nodejs22.x` / handler `index.handler` / timeout 30s / memory 256MB
+- **All Lambdas use CJS** (`require`/`exports.handler`) — not ESM
+
+### API Gateway Changes (TEST — `xrld1hq3e2`, stage `prod`)
+
+- All existing route integrations re-pointed from `MaterialsSelection-API` to the appropriate domain Lambda
+- 10 new resources created for orders/orderitems/receipts routes (previously missing from API GW entirely)
+- 4 missing GET methods added: `/lineitem-options`, `/lineitem-options/{optionId}`, `/categories/{categoryId}/lineitems`, `/product-vendors`
+- Stage redeployed (Deployment ID: `9ncwjb`)
+
+### Deploy Scripts
+
+| Script                         | Purpose                                                                                                     |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| `build-and-deploy-lambdas.ps1` | Zips each of the 5 lambda dirs and creates/updates the functions in AWS. Logs to `deploy-split-lambda.log`. |
+| `update-apigw-routes.ps1`      | Re-points API GW integrations and creates the orders/receipts resources.                                    |
+
+### Known Bugs Fixed During Refactor
+
+- Duplicate `getOrderItemsByOrder` / `getOrderItemsByProject` functions in the monolith (JavaScript silently used the second declaration). Only one copy exists in `lambda/orders/index.js`.
+- `GET /product-vendors` (bare list-all) was missing from the router — added during smoke testing.
+- `GET /lineitem-options` (bare list-all) and `GET /lineitem-options/{id}` were missing from the core router — added during smoke testing.
+- `ScanCommand` was not imported in `lambda/core/index.js` — added.
+
+### Smoke Test Results (TEST)
+
+| Route                    | Lambda   | Status |
+| ------------------------ | -------- | ------ |
+| `GET /projects`          | Projects | ✅ 200 |
+| `GET /vendors`           | Catalog  | ✅ 200 |
+| `GET /manufacturers`     | Catalog  | ✅ 200 |
+| `GET /products`          | Catalog  | ✅ 200 |
+| `GET /product-vendors`   | Catalog  | ✅ 200 |
+| `GET /lineitem-options`  | Core     | ✅ 200 |
+| `GET /sharepoint/config` | Projects | ✅ 200 |
+
+**Not yet tested:** orders write operations (`POST /orders`, etc.), AI routes (`POST /ai/test`, `/ai/chat`, `/ai/docs`).
+
+### Monolith Status
+
+`MaterialsSelection-API` (monolith) **still exists** in AWS TEST — not decommissioned. It can be used as a fallback if needed by temporarily re-pointing API GW integrations.
+
+### Git Commit
+
+`2653b5f` — `feat: split monolith Lambda into 5 domain Lambdas (TEST deployed)`
+
+---
+
+## Production Deployment Checklist
+
+When ready to repeat for production (`6extgb87v1`, account `860601623272`):
+
+- [ ] Run `build-and-deploy-lambdas.ps1` with `--profile megapros-prod`
+- [ ] Run `update-apigw-routes.ps1` targeting prod API GW
+- [ ] Set env vars on each Lambda (especially SharePoint vars on Projects-API)
+- [ ] Smoke test prod routes
+- [ ] Decommission old monolith (or leave as cold standby)

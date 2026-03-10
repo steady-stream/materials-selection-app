@@ -27,7 +27,8 @@
 ⚠️ **Known Issues / Pending:**
 
 - SharePoint changes not yet deployed to production (see [SHAREPOINT_MANUAL_LINK_2026-03-09.md](./SHAREPOINT_MANUAL_LINK_2026-03-09.md))
-- Lambda monolith refactor planned but not started (see [LAMBDA_REFACTOR_PLAN.md](./LAMBDA_REFACTOR_PLAN.md))
+- Lambda refactor deployed to TEST only — production deployment pending (see [LAMBDA_REFACTOR_PLAN.md](./LAMBDA_REFACTOR_PLAN.md))
+- Orders and AI Lambda routes not yet smoke-tested (write operations)
 
 ---
 
@@ -102,13 +103,46 @@ exclusively. No human action required.**
 
 - **Lambda refactor plan documented:** [LAMBDA_REFACTOR_PLAN.md](./LAMBDA_REFACTOR_PLAN.md) —
   split monolithic `MaterialsSelection-API` into 5 domain Lambdas to reduce deploy size
-  and improve maintainability. **Not yet implemented.**
+  and improve maintainability. **Implemented and deployed to TEST in session 2 (below).**
 
-### Git Commits (Mar 9)
+### Git Commits (Mar 9, session 1)
 
-| Hash | Description |
-|---|---|
-| *(this commit)* | SharePoint manual folder link feature + Lambda refactor plan |
+| Hash            | Description                                                  |
+| --------------- | ------------------------------------------------------------ |
+| _(this commit)_ | SharePoint manual folder link feature + Lambda refactor plan |
+
+---
+
+## Session Summary — March 9, 2026 (session 2 — Lambda Refactor)
+
+### Infrastructure / DevOps
+
+- **Lambda monolith split into 5 domain Lambdas** — all created and deployed to TEST.
+  See [LAMBDA_REFACTOR_PLAN.md](./LAMBDA_REFACTOR_PLAN.md) for full details.
+
+  | Lambda                            | Routes                                                                |
+  | --------------------------------- | --------------------------------------------------------------------- |
+  | `MaterialsSelection-Projects-API` | `/projects/*`, `/sharepoint/*`                                        |
+  | `MaterialsSelection-Core-API`     | `/categories/*`, `/lineitems/*`, `/lineitem-options/*`                |
+  | `MaterialsSelection-Catalog-API`  | `/vendors/*`, `/manufacturers/*`, `/products/*`, `/product-vendors/*` |
+  | `MaterialsSelection-Orders-API`   | `/orders/*`, `/orderitems/*`, `/receipts/*`                           |
+  | `MaterialsSelection-AI-API`       | `/ai/test`, `/ai/chat`, `/ai/docs`                                    |
+
+- **API Gateway TEST (`xrld1hq3e2`) updated:** all existing integrations re-pointed to domain Lambdas; 10 new orders/receipts resources created; stage redeployed (`9ncwjb`).
+- **Smoke test:** 7/7 GET routes returning 200. Orders write and AI routes not yet tested.
+- **Old monolith (`MaterialsSelection-API`) preserved** as cold standby — not decommissioned.
+
+### Bugs Fixed
+
+- Missing `GET /product-vendors` and `GET /lineitem-options` (bare list-all) route handlers added.
+- `ScanCommand` import missing from `lambda/core/index.js` — fixed.
+- Duplicate order-item functions in the monolith removed in the new Orders Lambda.
+
+### Git Commits (Mar 9, session 2)
+
+| Hash      | Description                                                       |
+| --------- | ----------------------------------------------------------------- |
+| `2653b5f` | feat: split monolith Lambda into 5 domain Lambdas (TEST deployed) |
 
 ---
 
