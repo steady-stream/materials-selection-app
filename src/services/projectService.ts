@@ -73,20 +73,43 @@ export const projectService = {
     await apiClient.delete(`/projects/${id}/files/${fileId}`);
   },
 
-  // List available folders in the SharePoint base folder for the user to pick from
+  // List available folders in the SharePoint base folder, or any subfolder by ID
   listSharepointFolders: async (
     id: string,
+    options?: { folderId?: string; driveId?: string; siteId?: string },
   ): Promise<{
     folders: SharepointFolder[];
     driveId: string;
     siteId: string;
+    currentFolderId: string;
   }> => {
+    const params = options?.folderId
+      ? `?folderId=${encodeURIComponent(options.folderId)}&driveId=${encodeURIComponent(options.driveId ?? "")}&siteId=${encodeURIComponent(options.siteId ?? "")}`
+      : "";
     const response = await apiClient.get<{
       folders: SharepointFolder[];
       driveId: string;
       siteId: string;
-    }>(`/projects/${id}/sharepoint/folders`);
+      currentFolderId: string;
+    }>(`/projects/${id}/sharepoint/folders${params}`);
     return response.data;
+  },
+
+  // Create a subfolder inside any existing SharePoint folder (does NOT link to project)
+  createSharepointFolder: async (
+    id: string,
+    data: {
+      parentFolderId: string;
+      driveId: string;
+      siteId: string;
+      folderName: string;
+    },
+  ): Promise<SharepointFolder> => {
+    const response = await apiClient.post<{ folder: SharepointFolder }>(
+      `/projects/${id}/sharepoint/folders`,
+      data,
+    );
+    return response.data.folder;
   },
 
   // Link an existing or newly created SharePoint folder to the project

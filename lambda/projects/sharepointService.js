@@ -318,10 +318,10 @@ async function listFoldersInBaseDir() {
   const driveId = await getDriveId(client, siteId, libraryName);
 
   // Creates the base folder if it doesn't exist yet
-  await ensureBaseFolderExists(client, driveId, baseFolderName);
+  const baseFolder = await ensureBaseFolderExists(client, driveId, baseFolderName);
 
   const children = await client
-    .api(`/drives/${driveId}/root:/${baseFolderName}:/children`)
+    .api(`/drives/${driveId}/items/${baseFolder.id}/children`)
     .get();
 
   const folders = (children.value || [])
@@ -334,7 +334,7 @@ async function listFoldersInBaseDir() {
       siteId,
     }));
 
-  return { folders, driveId, siteId };
+  return { folders, driveId, siteId, currentFolderId: baseFolder.id };
 }
 
 /**
@@ -386,6 +386,62 @@ async function createFolderWithName(folderName) {
   };
 }
 
+/**
+ * List folders inside any folder by driveId + item ID.
+ * Used for navigating into subfolders in the Link SharePoint modal.
+ * @param {string} driveId
+ * @param {string} folderId - Item ID of the folder to list children of
+ * @param {string} siteId - Passed through to folder objects
+ * @returns {Promise<{folders: Array, driveId: string, siteId: string, currentFolderId: string}>}
+ */
+async function listFolderById(driveId, folderId, siteId) {
+  const client = await getGraphClient();
+  const contents = await client
+    .api(`/drives/${driveId}/items/${folderId}/children`)
+    .get();
+  const folders = (contents.value || [])
+    .filter((item) => item.folder)
+    .map((item) => ({
+      id: item.id,
+      name: item.name,
+      webUrl: item.webUrl,
+      driveId,
+      siteId,
+    }));
+  return { folders, driveId, siteId, currentFolderId: folderId };
+}
+
+/**
+ * Create a folder inside any existing parent folder (by driveId + parentFolderId).
+ * Does NOT link the folder to the project — that is a separate step.
+ * @param {string} driveId
+ * @param {string} parentFolderId
+ * @param {string} siteId
+ * @param {string} folderName
+ * @returns {Promise<{id, name, webUrl, driveId, siteId}>}
+ */
+async function createFolderInParent(driveId, parentFolderId, siteId, folderName) {
+  const sanitized = sanitizeFolderName(folderName);
+  if (!sanitized) {
+    throw new Error("Invalid folder name after sanitization");
+  }
+  const client = await getGraphClient();
+  const newFolder = await client
+    .api(`/drives/${driveId}/items/${parentFolderId}/children`)
+    .post({
+      name: sanitized,
+      folder: {},
+      "@microsoft.graph.conflictBehavior": "rename",
+    });
+  return {
+    id: newFolder.id,
+    name: newFolder.name,
+    webUrl: newFolder.webUrl,
+    driveId,
+    siteId,
+  };
+}
+
 module.exports = {
   createProjectFolder,
   getProjectFolderContents,
@@ -393,4 +449,6 @@ module.exports = {
   deleteFileFromProjectFolder,
   listFoldersInBaseDir,
   createFolderWithName,
+  listFolderById,
+  createFolderInParent,
 };

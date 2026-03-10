@@ -159,10 +159,21 @@ const ProjectDetail = () => {
       siteId: string;
     }[]
   >([]);
+  // Navigation breadcrumb: empty = at base folder root
+  const [spNavStack, setSpNavStack] = useState<
+    { id: string; name: string; driveId: string; siteId: string }[]
+  >([]);
+  const [spCurrentFolderId, setSpCurrentFolderId] = useState<string | null>(
+    null,
+  );
+  const [spDriveId, setSpDriveId] = useState<string | null>(null);
+  const [spSiteId, setSpSiteId] = useState<string | null>(null);
+  const [spFolderFilter, setSpFolderFilter] = useState("");
   const [spFoldersLoading, setSpFoldersLoading] = useState(false);
   const [spFoldersError, setSpFoldersError] = useState<string | null>(null);
   const [spNewFolderName, setSpNewFolderName] = useState("");
   const [spLinking, setSpLinking] = useState(false);
+  const [spCreating, setSpCreating] = useState(false);
   const [spConfig, setSpConfig] = useState<{
     configured: boolean;
     siteUrl: string | null;
@@ -1012,29 +1023,71 @@ const ProjectDetail = () => {
 
   // --- SharePoint link-folder handlers ---
 
+  // Load the contents of a folder. No args = load the base folder root.
+  const loadSpFolderContents = async (
+    folderId?: string,
+    driveId?: string,
+    siteId?: string,
+  ) => {
+    if (!project) return;
+    setSpFoldersLoading(true);
+    setSpFoldersError(null);
+    try {
+      const data = await projectService.listSharepointFolders(
+        project.id,
+        folderId ? { folderId, driveId, siteId } : undefined,
+      );
+      setSpFolders(data.folders);
+      setSpCurrentFolderId(data.currentFolderId);
+      if (!folderId) {
+        setSpDriveId(data.driveId);
+        setSpSiteId(data.siteId);
+      }
+    } catch (err: unknown) {
+      setSpFoldersError(
+        err instanceof Error ? err.message : "Failed to load folders",
+      );
+    } finally {
+      setSpFoldersLoading(false);
+    }
+  };
+
   const handleOpenSpLinkModal = async () => {
     setShowSpLinkModal(true);
     setSpFoldersError(null);
     setSpNewFolderName("");
     setSpFolders([]);
+    setSpNavStack([]);
+    setSpFolderFilter("");
     setSpConfig(null);
-    setSpFoldersLoading(true);
-    try {
-      // Fetch config + folder list in parallel
-      const [configData, folderData] = await Promise.all([
-        projectService.getSharepointConfig(),
-        projectService.listSharepointFolders(project!.id),
-      ]);
-      setSpConfig(configData);
-      setSpFolders(folderData.folders);
-    } catch (err: unknown) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : "Failed to load SharePoint folders";
-      setSpFoldersError(msg);
-    } finally {
-      setSpFoldersLoading(false);
+    setSpCurrentFolderId(null);
+    // Load config (best-effort) and root folders in parallel
+    projectService.getSharepointConfig().then(setSpConfig).catch(() => {});
+    await loadSpFolderContents();
+  };
+
+  const handleSpNavigateInto = async (folder: {
+    id: string;
+    name: string;
+    webUrl: string;
+    driveId: string;
+    siteId: string;
+  }) => {
+    setSpNavStack((prev) => [...prev, folder]);
+    setSpFolderFilter("");
+    await loadSpFolderContents(folder.id, folder.driveId, folder.siteId);
+  };
+
+  // idx === -1 navigates to root; idx >= 0 navigates to that breadcrumb level
+  const handleSpNavigateToBreadcrumb = async (idx: number) => {
+    const newStack = idx < 0 ? [] : spNavStack.slice(0, idx + 1);
+    setSpNavStack(newStack);
+    setSpFolderFilter("");
+    if (newStack.length === 0) {
+      await loadSpFolderContents();
+    } else {
+      const target = newStack[newStack.length - 1];
+      await loadSpFolderContents(target.id, target.driveId, target.siteId);
     }
   };
 
@@ -1059,30 +1112,35 @@ const ProjectDetail = () => {
       setProject(updated);
       setShowSpLinkModal(false);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to link folder";
-      setSpFoldersError(msg);
+      setSpFoldersError(
+        err instanceof Error ? err.message : "Failed to link folder",
+      );
     } finally {
       setSpLinking(false);
     }
   };
 
-  const handleCreateAndLinkFolder = async () => {
-    if (!project || !spNewFolderName.trim()) return;
-    setSpLinking(true);
+  // Create a folder at the current navigation level — does NOT auto-link
+  const handleCreateSpFolder = async () => {
+    if (!project || !spNewFolderName.trim() || !spCurrentFolderId || !spDriveId)
+      return;
+    setSpCreating(true);
     setSpFoldersError(null);
     try {
-      const updated = await projectService.linkSharepointFolder(project.id, {
-        createNew: true,
+      const folder = await projectService.createSharepointFolder(project.id, {
+        parentFolderId: spCurrentFolderId,
+        driveId: spDriveId,
+        siteId: spSiteId ?? "",
         folderName: spNewFolderName.trim(),
       });
-      setProject(updated);
-      setShowSpLinkModal(false);
+      setSpFolders((prev) => [...prev, folder]);
+      setSpNewFolderName("");
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error ? err.message : "Failed to create folder";
-      setSpFoldersError(msg);
+      setSpFoldersError(
+        err instanceof Error ? err.message : "Failed to create folder",
+      );
     } finally {
-      setSpLinking(false);
+      setSpCreating(false);
     }
   };
 
@@ -5258,6 +5316,7 @@ const ProjectDetail = () => {
             onClick={() => !spLinking && setShowSpLinkModal(false)}
           />
           <div className="relative bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] flex flex-col">
+            {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <div>
                 <h2 className="text-lg font-semibold text-gray-900">
@@ -5282,17 +5341,65 @@ const ProjectDetail = () => {
               </button>
             </div>
 
-            <div className="overflow-y-auto flex-1 px-6 py-4 space-y-5">
+            {/* Body */}
+            <div className="overflow-y-auto flex-1 px-6 py-4 space-y-4">
               {spFoldersError && (
                 <div className="bg-red-50 border border-red-200 text-red-700 rounded px-3 py-2 text-sm">
                   {spFoldersError}
                 </div>
               )}
 
-              {/* Create new folder */}
+              {/* Breadcrumb navigation */}
+              <div className="flex items-center gap-1 text-sm flex-wrap min-h-[1.5rem]">
+                <button
+                  className="text-indigo-600 hover:underline font-medium disabled:text-gray-500 disabled:no-underline"
+                  onClick={() => handleSpNavigateToBreadcrumb(-1)}
+                  disabled={spNavStack.length === 0 || spFoldersLoading}
+                >
+                  {spConfig?.baseFolder ?? "Root"}
+                </button>
+                {spNavStack.map((folder, i) => (
+                  <span key={folder.id} className="flex items-center gap-1">
+                    <span className="text-gray-400">/</span>
+                    {i < spNavStack.length - 1 ? (
+                      <button
+                        className="text-indigo-600 hover:underline"
+                        onClick={() => handleSpNavigateToBreadcrumb(i)}
+                        disabled={spFoldersLoading}
+                      >
+                        {folder.name}
+                      </button>
+                    ) : (
+                      <span className="text-gray-700 font-medium">
+                        {folder.name}
+                      </span>
+                    )}
+                  </span>
+                ))}
+              </div>
+
+              {/* Filter — shown whenever there are folders to browse */}
+              {!spFoldersLoading && spFolders.length > 0 && (
+                <input
+                  type="text"
+                  value={spFolderFilter}
+                  onChange={(e) => setSpFolderFilter(e.target.value)}
+                  placeholder="Filter folders…"
+                  className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              )}
+
+              {/* Create new folder at current location */}
               <div>
                 <h3 className="text-sm font-semibold text-gray-700 mb-2">
-                  Create a new folder
+                  Create new folder
+                  {spNavStack.length > 0 && (
+                    <span className="font-normal text-gray-400">
+                      {" "}
+                      inside &ldquo;
+                      {spNavStack[spNavStack.length - 1].name}&rdquo;
+                    </span>
+                  )}
                 </h3>
                 <div className="flex gap-2">
                   <input
@@ -5300,18 +5407,23 @@ const ProjectDetail = () => {
                     value={spNewFolderName}
                     onChange={(e) => setSpNewFolderName(e.target.value)}
                     placeholder="Folder name"
-                    disabled={spLinking}
+                    disabled={spLinking || spCreating || !spCurrentFolderId}
                     className="flex-1 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-100"
                     onKeyDown={(e) =>
-                      e.key === "Enter" && handleCreateAndLinkFolder()
+                      e.key === "Enter" && handleCreateSpFolder()
                     }
                   />
                   <button
-                    onClick={handleCreateAndLinkFolder}
-                    disabled={!spNewFolderName.trim() || spLinking}
-                    className="bg-indigo-600 text-white px-3 py-1.5 rounded text-sm hover:bg-indigo-700 disabled:opacity-50"
+                    onClick={handleCreateSpFolder}
+                    disabled={
+                      !spNewFolderName.trim() ||
+                      spLinking ||
+                      spCreating ||
+                      !spCurrentFolderId
+                    }
+                    className="bg-indigo-600 text-white px-3 py-1.5 rounded text-sm hover:bg-indigo-700 disabled:opacity-50 whitespace-nowrap"
                   >
-                    {spLinking ? "Creating…" : "Create & Link"}
+                    {spCreating ? "Creating…" : "Create"}
                   </button>
                 </div>
               </div>
@@ -5327,41 +5439,65 @@ const ProjectDetail = () => {
                 </div>
               </div>
 
-              {/* Existing folders list */}
-              {spFoldersLoading ? (
-                <div className="text-center py-6 text-sm text-gray-500">
-                  Loading folders…
-                </div>
-              ) : spFolders.length === 0 && !spFoldersError ? (
-                <div className="text-center py-6 text-sm text-gray-400">
-                  No existing folders found.
-                </div>
-              ) : (
-                <ul className="divide-y divide-gray-100 border border-gray-200 rounded-md overflow-hidden">
-                  {spFolders.map((folder) => (
-                    <li
-                      key={folder.id}
-                      className="flex items-center justify-between px-4 py-2 hover:bg-gray-50"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-base">📁</span>
-                        <span className="text-sm text-gray-800 truncate">
-                          {folder.name}
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => handleLinkExistingFolder(folder)}
-                        disabled={spLinking}
-                        className="ml-4 flex-shrink-0 text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 disabled:opacity-50"
+              {/* Folder list */}
+              {(() => {
+                if (spFoldersLoading) {
+                  return (
+                    <div className="text-center py-6 text-sm text-gray-500">
+                      Loading folders…
+                    </div>
+                  );
+                }
+                const filtered = spFolders.filter(
+                  (f) =>
+                    !spFolderFilter ||
+                    f.name.toLowerCase().includes(spFolderFilter.toLowerCase()),
+                );
+                if (filtered.length === 0 && !spFoldersError) {
+                  return (
+                    <div className="text-center py-6 text-sm text-gray-400">
+                      {spFolderFilter
+                        ? "No folders match your filter."
+                        : "No folders here yet."}
+                    </div>
+                  );
+                }
+                return (
+                  <ul className="divide-y divide-gray-100 border border-gray-200 rounded-md overflow-hidden">
+                    {filtered.map((folder) => (
+                      <li
+                        key={folder.id}
+                        className="flex items-center justify-between px-4 py-2 hover:bg-gray-50"
                       >
-                        {spLinking ? "Linking…" : "Link"}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+                        {/* Clicking folder name/icon navigates into it */}
+                        <button
+                          className="flex items-center gap-2 min-w-0 flex-1 text-left disabled:opacity-50"
+                          onClick={() => handleSpNavigateInto(folder)}
+                          disabled={spLinking || spFoldersLoading}
+                        >
+                          <span className="text-base">📁</span>
+                          <span className="text-sm text-gray-800 truncate">
+                            {folder.name}
+                          </span>
+                          <span className="text-gray-400 text-sm ml-1 flex-shrink-0">
+                            ›
+                          </span>
+                        </button>
+                        <button
+                          onClick={() => handleLinkExistingFolder(folder)}
+                          disabled={spLinking}
+                          className="ml-3 flex-shrink-0 text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 disabled:opacity-50"
+                        >
+                          {spLinking ? "Linking…" : "Link"}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                );
+              })()}
             </div>
 
+            {/* Footer */}
             <div className="px-6 py-3 border-t border-gray-200 flex justify-end">
               <button
                 onClick={() => setShowSpLinkModal(false)}

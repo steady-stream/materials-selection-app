@@ -14,6 +14,8 @@ const {
   deleteFileFromProjectFolder,
   listFoldersInBaseDir,
   createFolderWithName,
+  listFolderById,
+  createFolderInParent,
 } = require("./sharepointService");
 
 const client = new DynamoDBClient({ region: "us-east-1" });
@@ -79,7 +81,19 @@ exports.handler = async (event) => {
       path.match(/^\/projects\/[^/]+\/sharepoint\/folders$/) &&
       method === "GET"
     ) {
-      return await listSharepointFolders(path.split("/")[2]);
+      return await listSharepointFolders(
+        path.split("/")[2],
+        event.queryStringParameters || {},
+      );
+    }
+    if (
+      path.match(/^\/projects\/[^/]+\/sharepoint\/folders$/) &&
+      method === "POST"
+    ) {
+      return await createProjectSubfolder(
+        path.split("/")[2],
+        JSON.parse(event.body || "{}"),
+      );
     }
     if (
       path.match(/^\/projects\/[^/]+\/sharepoint\/link$/) &&
@@ -327,7 +341,7 @@ async function getSharepointConfig() {
   };
 }
 
-async function listSharepointFolders(id) {
+async function listSharepointFolders(id, queryParams) {
   const result = await ddb.send(
     new GetCommand({ TableName: PROJECTS_TABLE, Key: { id } }),
   );
@@ -348,7 +362,11 @@ async function listSharepointFolders(id) {
     };
   }
   try {
-    const data = await listFoldersInBaseDir();
+    const { folderId, driveId, siteId } = queryParams || {};
+    const data =
+      folderId && driveId
+        ? await listFolderById(driveId, folderId, siteId || "")
+        : await listFoldersInBaseDir();
     return { statusCode: 200, headers, body: JSON.stringify(data) };
   } catch (error) {
     console.error("Error listing SharePoint folders:", error);
@@ -357,6 +375,57 @@ async function listSharepointFolders(id) {
       headers,
       body: JSON.stringify({
         message: "Failed to list SharePoint folders",
+        error: error.message,
+      }),
+    };
+  }
+}
+
+async function createProjectSubfolder(id, data) {
+  const result = await ddb.send(
+    new GetCommand({ TableName: PROJECTS_TABLE, Key: { id } }),
+  );
+  if (!result.Item) {
+    return {
+      statusCode: 404,
+      headers,
+      body: JSON.stringify({ message: "Project not found" }),
+    };
+  }
+  if (!process.env.SHAREPOINT_SITE_URL) {
+    return {
+      statusCode: 400,
+      headers,
+      body: JSON.stringify({
+        message: "SharePoint is not configured for this environment",
+      }),
+    };
+  }
+  const { parentFolderId, driveId, siteId, folderName } = data;
+  if (!parentFolderId || !driveId || !folderName) {
+    return {
+      statusCode: 400,
+      headers,
+      body: JSON.stringify({
+        message: "parentFolderId, driveId, and folderName are required",
+      }),
+    };
+  }
+  try {
+    const folder = await createFolderInParent(
+      driveId,
+      parentFolderId,
+      siteId || "",
+      folderName,
+    );
+    return { statusCode: 201, headers, body: JSON.stringify({ folder }) };
+  } catch (error) {
+    console.error("Error creating SharePoint subfolder:", error);
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({
+        message: "Failed to create folder",
         error: error.message,
       }),
     };
