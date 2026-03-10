@@ -108,7 +108,17 @@ export default function DocumentManager({
     return protocol ? protocol + encodeURIComponent(file.webUrl) : null;
   };
 
+  // API Gateway + Lambda sync payload cap: ~6MB total; base64 adds ~33% overhead → 4MB original file limit
+  const MAX_FILE_SIZE_BYTES = 4 * 1024 * 1024;
+
   const handleFileUpload = async (file: File) => {
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      setError(
+        `File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum upload size is 4 MB. For larger files, upload directly to SharePoint.`,
+      );
+      return;
+    }
+
     try {
       setUploading(true);
       setError(null);
