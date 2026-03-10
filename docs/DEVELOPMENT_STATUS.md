@@ -1,6 +1,6 @@
 # Materials Selection App - Development Status
 
-**Last Updated:** March 9, 2026  
+**Last Updated:** March 10, 2026  
 **Environments:** Test (mpmaterials.apiaconsulting.com) | Production (d377ynyh0ngsji.cloudfront.net)
 
 ## Current Status Summary
@@ -29,6 +29,12 @@
 - SharePoint changes not yet deployed to production (see [SHAREPOINT_MANUAL_LINK_2026-03-09.md](./SHAREPOINT_MANUAL_LINK_2026-03-09.md))
 - Lambda refactor deployed to TEST only — production deployment pending (see [LAMBDA_REFACTOR_PLAN.md](./LAMBDA_REFACTOR_PLAN.md))
 - Orders and AI Lambda routes not yet smoke-tested (write operations)
+
+### Bug Fixes (March 10, 2026)
+
+- **Projects list crash on load** — `MaterialsSelection-Projects-API` `getAllProjects()` was returning a raw
+  array (`[]`) but the frontend `projectService.getAll()` expected `{ projects: [...] }`. Fixed: Lambda now
+  returns the correct envelope; service also has a defensive fallback for either shape.
 
 ---
 

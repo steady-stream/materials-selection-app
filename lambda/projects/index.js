@@ -111,7 +111,11 @@ exports.handler = async (event) => {
 
 async function getAllProjects() {
   const result = await ddb.send(new ScanCommand({ TableName: PROJECTS_TABLE }));
-  return { statusCode: 200, headers, body: JSON.stringify(result.Items || []) };
+  return {
+    statusCode: 200,
+    headers,
+    body: JSON.stringify({ projects: result.Items || [] }),
+  };
 }
 
 async function getProject(id) {

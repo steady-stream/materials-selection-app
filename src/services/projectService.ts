@@ -17,8 +17,12 @@ interface SharepointFolder {
 export const projectService = {
   // Get all projects
   getAll: async (): Promise<Project[]> => {
-    const response = await apiClient.get<{ projects: Project[] }>("/projects");
-    return response.data.projects;
+    const response = await apiClient.get<{ projects: Project[] } | Project[]>(
+      "/projects",
+    );
+    // Handle both { projects: [...] } shape and raw array (defensive fallback)
+    if (Array.isArray(response.data)) return response.data;
+    return response.data.projects ?? [];
   },
 
   // Get a single project by ID
