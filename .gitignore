@@ -24,10 +24,22 @@ dist-ssr
 *.sw?
 
 # Lambda deployment artifacts
-lambda/*.zip
+*.zip
 lambda/deploy/
 lambda/temp_lambda_zip/
+lambda-deploy-*.zip
+lambda-sp-changes.zip
+lambda/**/*.zip
 cors-response.json
+
+# MCP / tooling artifacts  
+.mcp/project-knowledge/build/
+.mcp/project-knowledge/node_modules/
+
+# Test/debug response dumps
+test-response*.json
+sf-response.json
+lambda-salesforce/sf-response.json
 
 docs/SFConnect.txt
 

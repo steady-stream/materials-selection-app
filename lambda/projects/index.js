@@ -478,6 +478,7 @@ async function linkSharepointFolder(id, data) {
     const updatedProject = {
       ...project,
       sharepointFolderId: folderInfo.id,
+      sharepointFolderName: folderInfo.name,
       sharepointFolderUrl: folderInfo.webUrl,
       sharepointDriveId: folderInfo.driveId,
       sharepointSiteId: folderInfo.siteId,

@@ -318,7 +318,11 @@ async function listFoldersInBaseDir() {
   const driveId = await getDriveId(client, siteId, libraryName);
 
   // Creates the base folder if it doesn't exist yet
-  const baseFolder = await ensureBaseFolderExists(client, driveId, baseFolderName);
+  const baseFolder = await ensureBaseFolderExists(
+    client,
+    driveId,
+    baseFolderName,
+  );
 
   const children = await client
     .api(`/drives/${driveId}/items/${baseFolder.id}/children`)
@@ -420,7 +424,12 @@ async function listFolderById(driveId, folderId, siteId) {
  * @param {string} folderName
  * @returns {Promise<{id, name, webUrl, driveId, siteId}>}
  */
-async function createFolderInParent(driveId, parentFolderId, siteId, folderName) {
+async function createFolderInParent(
+  driveId,
+  parentFolderId,
+  siteId,
+  folderName,
+) {
   const sanitized = sanitizeFolderName(folderName);
   if (!sanitized) {
     throw new Error("Invalid folder name after sanitization");

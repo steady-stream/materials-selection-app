@@ -26,6 +26,7 @@ export interface Project {
   updatedAt: string;
   // SharePoint integration fields
   sharepointFolderId?: string;
+  sharepointFolderName?: string;
   sharepointFolderUrl?: string;
   sharepointDriveId?: string;
   sharepointSiteId?: string;

@@ -1062,7 +1062,10 @@ const ProjectDetail = () => {
     setSpConfig(null);
     setSpCurrentFolderId(null);
     // Load config (best-effort) and root folders in parallel
-    projectService.getSharepointConfig().then(setSpConfig).catch(() => {});
+    projectService
+      .getSharepointConfig()
+      .then(setSpConfig)
+      .catch(() => {});
     await loadSpFolderContents();
   };
 
@@ -5310,21 +5313,17 @@ const ProjectDetail = () => {
 
       {/* Link SharePoint Folder Modal */}
       {showSpLinkModal && project && (
-        <div className="fixed inset-0 flex items-center justify-center p-4 z-50">
-          <div
-            className="fixed inset-0 bg-gray-500 bg-opacity-50"
-            onClick={() => !spLinking && setShowSpLinkModal(false)}
-          />
-          <div className="relative bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] flex flex-col">
+        <div className="fixed inset-0 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-2xl border-2 border-gray-300 w-full max-w-2xl max-h-[90vh] flex flex-col">
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">
+                <h3 className="text-sm font-semibold text-gray-900">
                   Link SharePoint Folder
-                </h2>
+                </h3>
                 {spConfig?.siteUrl && (
                   <p
-                    className="text-xs text-gray-400 mt-0.5 truncate max-w-sm"
+                    className="text-xs text-gray-500 mt-0.5 truncate max-w-sm"
                     title={spConfig.siteUrl}
                   >
                     {spConfig.siteUrl} / {spConfig.library} /{" "}
@@ -5335,22 +5334,22 @@ const ProjectDetail = () => {
               <button
                 onClick={() => setShowSpLinkModal(false)}
                 disabled={spLinking}
-                className="text-gray-400 hover:text-gray-600 text-2xl leading-none disabled:opacity-50"
+                className="text-gray-400 hover:text-gray-600 disabled:opacity-50"
               >
                 ×
               </button>
             </div>
 
             {/* Body */}
-            <div className="overflow-y-auto flex-1 px-6 py-4 space-y-4">
+            <div className="overflow-y-auto flex-1 px-4 py-3 space-y-3">
               {spFoldersError && (
-                <div className="bg-red-50 border border-red-200 text-red-700 rounded px-3 py-2 text-sm">
+                <div className="bg-red-50 border border-red-200 text-red-700 rounded px-3 py-2 text-xs">
                   {spFoldersError}
                 </div>
               )}
 
               {/* Breadcrumb navigation */}
-              <div className="flex items-center gap-1 text-sm flex-wrap min-h-[1.5rem]">
+              <div className="flex items-center gap-1 text-xs flex-wrap min-h-[1.25rem]">
                 <button
                   className="text-indigo-600 hover:underline font-medium disabled:text-gray-500 disabled:no-underline"
                   onClick={() => handleSpNavigateToBreadcrumb(-1)}
@@ -5385,22 +5384,22 @@ const ProjectDetail = () => {
                   value={spFolderFilter}
                   onChange={(e) => setSpFolderFilter(e.target.value)}
                   placeholder="Filter folders…"
-                  className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               )}
 
               {/* Create new folder at current location */}
               <div>
-                <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                <label className="block text-xs font-medium text-gray-700 mb-1">
                   Create new folder
                   {spNavStack.length > 0 && (
-                    <span className="font-normal text-gray-400">
+                    <span className="font-normal text-gray-500">
                       {" "}
                       inside &ldquo;
                       {spNavStack[spNavStack.length - 1].name}&rdquo;
                     </span>
                   )}
-                </h3>
+                </label>
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -5408,7 +5407,7 @@ const ProjectDetail = () => {
                     onChange={(e) => setSpNewFolderName(e.target.value)}
                     placeholder="Folder name"
                     disabled={spLinking || spCreating || !spCurrentFolderId}
-                    className="flex-1 border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-100"
+                    className="flex-1 border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-100"
                     onKeyDown={(e) =>
                       e.key === "Enter" && handleCreateSpFolder()
                     }
@@ -5421,7 +5420,7 @@ const ProjectDetail = () => {
                       spCreating ||
                       !spCurrentFolderId
                     }
-                    className="bg-indigo-600 text-white px-3 py-1.5 rounded text-sm hover:bg-indigo-700 disabled:opacity-50 whitespace-nowrap"
+                    className="bg-indigo-600 text-white px-3 py-1 rounded text-xs hover:bg-indigo-700 disabled:opacity-50 whitespace-nowrap"
                   >
                     {spCreating ? "Creating…" : "Create"}
                   </button>
@@ -5443,7 +5442,7 @@ const ProjectDetail = () => {
               {(() => {
                 if (spFoldersLoading) {
                   return (
-                    <div className="text-center py-6 text-sm text-gray-500">
+                    <div className="text-center py-4 text-xs text-gray-500">
                       Loading folders…
                     </div>
                   );
@@ -5455,7 +5454,7 @@ const ProjectDetail = () => {
                 );
                 if (filtered.length === 0 && !spFoldersError) {
                   return (
-                    <div className="text-center py-6 text-sm text-gray-400">
+                    <div className="text-center py-4 text-xs text-gray-400">
                       {spFolderFilter
                         ? "No folders match your filter."
                         : "No folders here yet."}
@@ -5467,7 +5466,7 @@ const ProjectDetail = () => {
                     {filtered.map((folder) => (
                       <li
                         key={folder.id}
-                        className="flex items-center justify-between px-4 py-2 hover:bg-gray-50"
+                        className="flex items-center justify-between px-3 py-1.5 hover:bg-gray-50"
                       >
                         {/* Clicking folder name/icon navigates into it */}
                         <button
@@ -5475,11 +5474,11 @@ const ProjectDetail = () => {
                           onClick={() => handleSpNavigateInto(folder)}
                           disabled={spLinking || spFoldersLoading}
                         >
-                          <span className="text-base">📁</span>
-                          <span className="text-sm text-gray-800 truncate">
+                          <span className="text-sm">📁</span>
+                          <span className="text-xs text-gray-800 truncate">
                             {folder.name}
                           </span>
-                          <span className="text-gray-400 text-sm ml-1 flex-shrink-0">
+                          <span className="text-gray-400 text-xs ml-1 flex-shrink-0">
                             ›
                           </span>
                         </button>
@@ -5498,11 +5497,11 @@ const ProjectDetail = () => {
             </div>
 
             {/* Footer */}
-            <div className="px-6 py-3 border-t border-gray-200 flex justify-end">
+            <div className="px-4 py-3 border-t border-gray-200 flex justify-end">
               <button
                 onClick={() => setShowSpLinkModal(false)}
                 disabled={spLinking}
-                className="text-sm text-gray-600 hover:text-gray-900 disabled:opacity-50"
+                className="text-xs text-gray-600 hover:text-gray-900 disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -5516,9 +5515,19 @@ const ProjectDetail = () => {
         <div className="fixed inset-0 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">
-                Project Documents
-              </h2>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">
+                  Project Documents
+                </h2>
+                {project?.sharepointFolderUrl && (
+                  <p
+                    className="text-xs text-gray-500 mt-0.5 truncate max-w-2xl"
+                    title={project.sharepointFolderUrl}
+                  >
+                    {decodeURIComponent(project.sharepointFolderUrl)}
+                  </p>
+                )}
+              </div>
               <button
                 onClick={() => setShowDocumentsModal(false)}
                 className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
