@@ -16,6 +16,7 @@ import type {
     Category,
     CreateCategoryRequest,
     CreateLineItemRequest,
+    CreateProductRequest,
     LineItem,
     LineItemOption,
     Manufacturer,
@@ -134,11 +135,59 @@ const ProjectDetail = () => {
     best: false,
   });
   const [filterCollection, setFilterCollection] = useState<string>("");
+  const [filterColor, setFilterColor] = useState<string>("");
+  const [hoverInsertProduct, setHoverInsertProduct] = useState<string | null>(
+    null,
+  );
+  const [tooltipInsertPos, setTooltipInsertPos] = useState<{
+    left?: number;
+    right?: number;
+    top?: number;
+    bottom?: number;
+  }>({});
   const [selectedCategoryForInsert, setSelectedCategoryForInsert] =
     useState<string>("");
   const [insertQuantity, setInsertQuantity] = useState<number>(1);
   const [insertUnitCost, setInsertUnitCost] = useState<number>(0);
+  const [insertVendorId, setInsertVendorId] = useState<string>("");
   const [openActionMenu, setOpenActionMenu] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{
+    top?: number;
+    bottom?: number;
+    right: number;
+  }>({ right: 0 });
+  const [hoverLineItem, setHoverLineItem] = useState<string | null>(null);
+  const [hoverLineItemPos, setHoverLineItemPos] = useState<{
+    left?: number;
+    right?: number;
+    top?: number;
+    bottom?: number;
+  }>({});
+  // L4: Quick-add product inside the Insert Product modal
+  const [showQuickAddProduct, setShowQuickAddProduct] = useState(false);
+  const [quickAddProductSaving, setQuickAddProductSaving] = useState(false);
+  const [quickAddProduct, setQuickAddProduct] = useState<{
+    name: string;
+    manufacturerId: string;
+    modelNumber: string;
+    description: string;
+    category: string;
+    unit: string;
+    tier: "" | "good" | "better" | "best";
+    color: string;
+  }>({
+    name: "",
+    manufacturerId: "",
+    modelNumber: "",
+    description: "",
+    category: "",
+    unit: "ea",
+    tier: "",
+    color: "",
+  });
+  const [showQAMfrInInsert, setShowQAMfrInInsert] = useState(false);
+  const [qaInsertMfrName, setQaInsertMfrName] = useState("");
+  const [qaInsertMfrSaving, setQaInsertMfrSaving] = useState(false);
   const [showDocumentsModal, setShowDocumentsModal] = useState(false);
   const [showOptionsModal, setShowOptionsModal] = useState(false);
   const [optionsForLineItem, setOptionsForLineItem] = useState<LineItem | null>(
@@ -707,9 +756,25 @@ const ProjectDetail = () => {
    * Key behaviors:
    * - Vendor selection filters products to those the vendor carries
    * - If manufacturer already selected, filters by BOTH vendor AND manufacturer
-   * - If product already selected, expands to full list (allows changing vendor)
-   * - Preserves vendor when manufacturer subsequently selected
    */
+
+  // Quick status update directly from the read-only row badge — avoids requiring
+  // full inline edit mode just to change status.
+  const handleQuickStatusChange = async (item: LineItem, newStatus: string) => {
+    try {
+      const updated = await lineItemService.update(item.id, {
+        ...item,
+        status: newStatus as LineItem["status"],
+      });
+      setLineItems(
+        lineItems.map((li) => (li.id === updated.id ? updated : li)),
+      );
+    } catch (err) {
+      console.error("Failed to update status:", err);
+      alert("Failed to update status");
+    }
+  };
+
   const handleNewItemVendorChange = async (vendorId: string) => {
     const vendor = vendorId || undefined;
     setNewItem({ ...newItem, vendorId: vendor });
@@ -941,8 +1006,10 @@ const ProjectDetail = () => {
       setFilterCategory("");
       setFilterTier({ good: false, better: false, best: false });
       setFilterCollection("");
+      setFilterColor("");
       setInsertQuantity(1);
       setInsertUnitCost(0);
+      setInsertVendorId("");
     } catch (err) {
       alert("Failed to select product");
       console.error("Error selecting product:", err);
@@ -960,10 +1027,23 @@ const ProjectDetail = () => {
     }
 
     try {
-      // Get primary vendor for this product
-      const primaryVendor = await productVendorService.getPrimaryVendor(
-        product.id,
-      );
+      // If vendor override is set, use locally-loaded productVendors for cost lookup
+      // to avoid an extra API call. Fall back to getPrimaryVendor otherwise.
+      let vendorId: string | undefined;
+      let vendorCost = 0;
+      if (insertVendorId) {
+        const overridePV = productVendors.find(
+          (pv) => pv.productId === product.id && pv.vendorId === insertVendorId,
+        );
+        vendorId = insertVendorId;
+        vendorCost = overridePV?.cost || 0;
+      } else {
+        const primaryVendor = await productVendorService.getPrimaryVendor(
+          product.id,
+        );
+        vendorId = primaryVendor?.vendorId;
+        vendorCost = primaryVendor?.cost || 0;
+      }
 
       const newLineItem: CreateLineItemRequest = {
         categoryId: selectedCategoryForInsert,
@@ -972,12 +1052,11 @@ const ProjectDetail = () => {
         material: product.description || "",
         quantity: insertQuantity,
         unit: product.unit || "ea",
-        unitCost:
-          insertUnitCost > 0 ? insertUnitCost : primaryVendor?.cost || 0,
+        unitCost: insertUnitCost > 0 ? insertUnitCost : vendorCost,
         notes: product.modelNumber ? `Model: ${product.modelNumber}` : "",
         productId: product.id,
         manufacturerId: product.manufacturerId,
-        vendorId: primaryVendor?.vendorId,
+        vendorId,
         modelNumber: product.modelNumber,
         status: "pending",
       };
@@ -987,8 +1066,7 @@ const ProjectDetail = () => {
       // Sync to LineItemOptions
       await lineItemOptionService.selectOption(created.id, {
         productId: product.id,
-        unitCost:
-          insertUnitCost > 0 ? insertUnitCost : primaryVendor?.cost || 0,
+        unitCost: insertUnitCost > 0 ? insertUnitCost : vendorCost,
       });
 
       setLineItems([...lineItems, created]);
@@ -1000,11 +1078,59 @@ const ProjectDetail = () => {
       setFilterCategory("");
       setFilterTier({ good: false, better: false, best: false });
       setFilterCollection("");
+      setFilterColor("");
       setInsertQuantity(1);
       setInsertUnitCost(0);
+      setInsertVendorId("");
     } catch (err) {
       alert("Failed to insert product");
       console.error("Error inserting product:", err);
+    }
+  };
+
+  const handleQuickAddProduct = async () => {
+    if (!quickAddProduct.name.trim() || !quickAddProduct.manufacturerId) return;
+    setQuickAddProductSaving(true);
+    try {
+      const req: CreateProductRequest = {
+        name: quickAddProduct.name.trim(),
+        manufacturerId: quickAddProduct.manufacturerId,
+        ...(quickAddProduct.modelNumber.trim() && {
+          modelNumber: quickAddProduct.modelNumber.trim(),
+        }),
+        ...(quickAddProduct.description.trim() && {
+          description: quickAddProduct.description.trim(),
+        }),
+        ...(quickAddProduct.category.trim() && {
+          category: quickAddProduct.category.trim(),
+        }),
+        unit: quickAddProduct.unit || "ea",
+        ...(quickAddProduct.tier && { tier: quickAddProduct.tier }),
+        ...(quickAddProduct.color.trim() && {
+          color: quickAddProduct.color.trim(),
+        }),
+      };
+      const created = await productService.createProduct(req);
+      setProducts((prev) => [...prev, created]);
+      setShowQuickAddProduct(false);
+      setQuickAddProduct({
+        name: "",
+        manufacturerId: "",
+        modelNumber: "",
+        description: "",
+        category: "",
+        unit: "ea",
+        tier: "",
+        color: "",
+      });
+      setShowQAMfrInInsert(false);
+      setQaInsertMfrName("");
+      // Auto-filter so the new product is visible immediately
+      setSearchTerm(created.name);
+    } catch {
+      // leave form open on error so user doesn't lose their data
+    } finally {
+      setQuickAddProductSaving(false);
     }
   };
 
@@ -1785,10 +1911,12 @@ const ProjectDetail = () => {
                   setFilterCategory("");
                   setFilterTier({ good: false, better: false, best: false });
                   setFilterCollection("");
+                  setFilterColor("");
                   setSearchTerm("");
                   setSelectedCategoryForInsert(categories[0]?.id || "");
                   setInsertQuantity(1);
                   setInsertUnitCost(0);
+                  setInsertVendorId("");
                 }}
                 className="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700"
               >
@@ -1984,10 +2112,10 @@ const ProjectDetail = () => {
                           <th className="px-2 py-1 text-left font-medium text-gray-600 w-32">
                             Item
                           </th>
-                          <th className="px-2 py-1 text-right font-medium text-gray-600 w-12">
+                          <th className="px-2 py-1 text-right font-medium text-gray-600 w-20">
                             Qty
                           </th>
-                          <th className="px-2 py-1 text-left font-medium text-gray-600 w-12">
+                          <th className="px-2 py-1 text-left font-medium text-gray-600 w-16">
                             Unit
                           </th>
                           <th className="px-2 py-1 text-right font-medium text-gray-600 w-20">
@@ -2243,7 +2371,7 @@ const ProjectDetail = () => {
                             <>
                               <tr
                                 key={item.id}
-                                className="border-b border-gray-100 hover:bg-gray-50"
+                                className="border-b border-gray-100 hover:bg-gray-50 relative"
                               >
                                 <td className="px-2 py-1">{item.name}</td>
                                 <td className="px-2 py-1 text-right">
@@ -2296,8 +2424,165 @@ const ProjectDetail = () => {
                                       })()
                                     : "-"}
                                 </td>
-                                <td className="px-2 py-1 text-gray-600">
+                                <td
+                                  className="px-2 py-1 text-gray-600 cursor-help"
+                                  onMouseEnter={(e) => {
+                                    setHoverLineItem(item.id);
+                                    const spaceRight =
+                                      window.innerWidth - e.clientX;
+                                    const spaceBelow =
+                                      window.innerHeight - e.clientY;
+                                    setHoverLineItemPos({
+                                      left:
+                                        spaceRight >= 336
+                                          ? e.clientX + 16
+                                          : undefined,
+                                      right:
+                                        spaceRight < 336
+                                          ? window.innerWidth - e.clientX + 16
+                                          : undefined,
+                                      top:
+                                        spaceBelow >= 280
+                                          ? e.clientY + 16
+                                          : undefined,
+                                      bottom:
+                                        spaceBelow < 280
+                                          ? window.innerHeight - e.clientY + 16
+                                          : undefined,
+                                    });
+                                  }}
+                                  onMouseLeave={() => setHoverLineItem(null)}
+                                >
                                   {item.modelNumber || "-"}
+                                  {hoverLineItem === item.id &&
+                                    item.productId &&
+                                    (() => {
+                                      const prod = products.find(
+                                        (p) => p.id === item.productId,
+                                      );
+                                      if (!prod) return null;
+                                      const mfr = manufacturers.find(
+                                        (m) => m.id === prod.manufacturerId,
+                                      );
+                                      const pvList = productVendors.filter(
+                                        (pv) => pv.productId === prod.id,
+                                      );
+                                      return (
+                                        <div
+                                          className="fixed z-50 pointer-events-none"
+                                          style={{
+                                            left: hoverLineItemPos.left,
+                                            right: hoverLineItemPos.right,
+                                            top: hoverLineItemPos.top,
+                                            bottom: hoverLineItemPos.bottom,
+                                          }}
+                                        >
+                                          <div className="bg-white border border-gray-300 rounded-lg shadow-xl p-3 w-80 text-xs">
+                                            <div className="font-semibold text-gray-900 mb-1">
+                                              {prod.name}
+                                            </div>
+                                            {prod.description && (
+                                              <div className="text-gray-600 mb-2">
+                                                {prod.description}
+                                              </div>
+                                            )}
+                                            <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-gray-700">
+                                              {prod.modelNumber && (
+                                                <>
+                                                  <span className="text-gray-500">
+                                                    Model:
+                                                  </span>
+                                                  <span>
+                                                    {prod.modelNumber}
+                                                  </span>
+                                                </>
+                                              )}
+                                              {mfr && (
+                                                <>
+                                                  <span className="text-gray-500">
+                                                    Manufacturer:
+                                                  </span>
+                                                  <span>{mfr.name}</span>
+                                                </>
+                                              )}
+                                              {prod.category && (
+                                                <>
+                                                  <span className="text-gray-500">
+                                                    Category:
+                                                  </span>
+                                                  <span>{prod.category}</span>
+                                                </>
+                                              )}
+                                              {prod.color && (
+                                                <>
+                                                  <span className="text-gray-500">
+                                                    Color:
+                                                  </span>
+                                                  <span>{prod.color}</span>
+                                                </>
+                                              )}
+                                              {prod.unit && (
+                                                <>
+                                                  <span className="text-gray-500">
+                                                    Unit:
+                                                  </span>
+                                                  <span>{prod.unit}</span>
+                                                </>
+                                              )}
+                                              {prod.tier && (
+                                                <>
+                                                  <span className="text-gray-500">
+                                                    Tier:
+                                                  </span>
+                                                  <span className="capitalize">
+                                                    {prod.tier}
+                                                  </span>
+                                                </>
+                                              )}
+                                              {prod.collection && (
+                                                <>
+                                                  <span className="text-gray-500">
+                                                    Collection:
+                                                  </span>
+                                                  <span>{prod.collection}</span>
+                                                </>
+                                              )}
+                                            </div>
+                                            {pvList.length > 0 && (
+                                              <div className="mt-2 border-t pt-1">
+                                                <div className="text-gray-500 mb-0.5">
+                                                  Vendors:
+                                                </div>
+                                                {pvList.map((pv) => {
+                                                  const v = vendors.find(
+                                                    (vv) =>
+                                                      vv.id === pv.vendorId,
+                                                  );
+                                                  return (
+                                                    <div
+                                                      key={pv.id}
+                                                      className="flex justify-between"
+                                                    >
+                                                      <span>
+                                                        {v?.name}
+                                                        {pv.isPrimary && (
+                                                          <span className="ml-1 text-yellow-600">
+                                                            ★
+                                                          </span>
+                                                        )}
+                                                      </span>
+                                                      <span className="font-medium">
+                                                        ${pv.cost.toFixed(2)}
+                                                      </span>
+                                                    </div>
+                                                  );
+                                                })}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      );
+                                    })()}
                                 </td>
                                 <td
                                   className="px-2 py-1 text-gray-600 truncate max-w-[6rem]"
@@ -2306,8 +2591,16 @@ const ProjectDetail = () => {
                                   {item.material}
                                 </td>
                                 <td className="px-2 py-1">
-                                  <span
-                                    className={`px-1 py-0.5 rounded text-xs ${
+                                  {/* Status select — always on first line */}
+                                  <select
+                                    value={item.status || "pending"}
+                                    onChange={(e) =>
+                                      handleQuickStatusChange(
+                                        item,
+                                        e.target.value,
+                                      )
+                                    }
+                                    className={`px-1 py-0.5 rounded text-xs cursor-pointer border-0 focus:ring-1 focus:ring-indigo-400 ${
                                       item.status === "installed"
                                         ? "bg-green-100 text-green-700"
                                         : item.status === "ordered"
@@ -2319,67 +2612,113 @@ const ProjectDetail = () => {
                                               : "bg-gray-100 text-gray-700"
                                     }`}
                                   >
-                                    {item.status || "pending"}
-                                  </span>
-                                  {getLineItemOrders(item.id).length > 0 && (
+                                    <option value="pending">pending</option>
+                                    <option value="selected">selected</option>
+                                    <option value="final">final</option>
+                                    <option value="ordered">ordered</option>
+                                    <option value="received">received</option>
+                                    <option value="part recvd">
+                                      part recvd
+                                    </option>
+                                    <option value="installed">installed</option>
+                                  </select>
+                                  {/* Action icons — always on their own line below status */}
+                                  <div className="flex gap-1 mt-0.5">
+                                    {getLineItemOrders(item.id).length > 0 && (
+                                      <button
+                                        onClick={() =>
+                                          toggleCategoryLineItemDetails(item.id)
+                                        }
+                                        className="text-blue-600 hover:text-blue-900"
+                                        title="View order details"
+                                      >
+                                        {expandedCategoryLineItems.has(item.id)
+                                          ? "🔽"
+                                          : "📋"}
+                                      </button>
+                                    )}
                                     <button
                                       onClick={() =>
-                                        toggleCategoryLineItemDetails(item.id)
+                                        handleOpenOptionsModal(item.id)
                                       }
-                                      className="ml-1 text-blue-600 hover:text-blue-900"
-                                      title="View order details"
+                                      className="text-purple-600 hover:text-purple-900"
+                                      title="Choose options (Good/Better/Best)"
                                     >
-                                      {expandedCategoryLineItems.has(item.id)
-                                        ? "🔽"
-                                        : "📋"}
+                                      {hasUnselectedOptions(item.id)
+                                        ? "❓"
+                                        : "⚙️"}
                                     </button>
-                                  )}
-                                  <button
-                                    onClick={() =>
-                                      handleOpenOptionsModal(item.id)
-                                    }
-                                    className="ml-1 text-purple-600 hover:text-purple-900"
-                                    title="Choose options (Good/Better/Best)"
-                                  >
-                                    {hasUnselectedOptions(item.id)
-                                      ? "❓"
-                                      : "⚙️"}
-                                  </button>
-                                  {(item.status === "pending" ||
-                                    item.status === "selected") && (
+                                    {(item.status === "pending" ||
+                                      item.status === "selected") && (
+                                      <button
+                                        onClick={() =>
+                                          handleOpenSelectProduct(item)
+                                        }
+                                        className="text-green-600 hover:text-green-900"
+                                        title="Select product"
+                                      >
+                                        📦
+                                      </button>
+                                    )}
                                     <button
                                       onClick={() =>
-                                        handleOpenSelectProduct(item)
+                                        handleStartInlineEdit(item)
                                       }
-                                      className="ml-1 text-green-600 hover:text-green-900"
-                                      title="Select product"
+                                      className="text-indigo-600 hover:text-indigo-900"
+                                      title="Edit inline"
                                     >
-                                      📦
+                                      ✏️
                                     </button>
-                                  )}
-                                  <button
-                                    onClick={() => handleStartInlineEdit(item)}
-                                    className="ml-1 text-indigo-600 hover:text-indigo-900"
-                                    title="Edit inline"
-                                  >
-                                    ✏️
-                                  </button>
+                                  </div>
                                 </td>
                                 <td className="px-2 py-1 text-center relative bg-gray-100">
                                   <button
-                                    onClick={() =>
+                                    onClick={(e) => {
+                                      const rect =
+                                        e.currentTarget.getBoundingClientRect();
+                                      const spaceBelow =
+                                        window.innerHeight - rect.bottom;
+                                      const right =
+                                        window.innerWidth - rect.right;
+                                      setMenuPos(
+                                        spaceBelow >= 220
+                                          ? { top: rect.bottom + 2, right }
+                                          : {
+                                              bottom:
+                                                window.innerHeight -
+                                                rect.top +
+                                                2,
+                                              right,
+                                            },
+                                      );
                                       setOpenActionMenu(
                                         openActionMenu === item.id
                                           ? null
                                           : item.id,
-                                      )
-                                    }
+                                      );
+                                    }}
                                     className="text-lg font-bold text-gray-700 hover:text-gray-900"
                                   >
                                     ⋮
                                   </button>
                                   {openActionMenu === item.id && (
-                                    <div className="absolute right-0 bottom-full mb-1 w-32 bg-white rounded-md shadow-lg border border-gray-200 z-10">
+                                    <div
+                                      className="fixed w-40 bg-white rounded-md shadow-lg border border-gray-200 z-50"
+                                      style={{
+                                        top: menuPos.top,
+                                        bottom: menuPos.bottom,
+                                        right: menuPos.right,
+                                      }}
+                                    >
+                                      <button
+                                        onClick={() => {
+                                          handleStartInlineEdit(item);
+                                          setOpenActionMenu(null);
+                                        }}
+                                        className="block w-full text-left px-3 py-2 text-xs text-indigo-600 hover:bg-gray-50"
+                                      >
+                                        Edit (inline)
+                                      </button>
                                       <button
                                         onClick={() => {
                                           handleStartModalEdit(item);
@@ -2387,7 +2726,7 @@ const ProjectDetail = () => {
                                         }}
                                         className="block w-full text-left px-3 py-2 text-xs text-indigo-600 hover:bg-gray-50"
                                       >
-                                        Edit
+                                        Edit (detail)
                                       </button>
                                       <button
                                         onClick={() => {
@@ -2396,8 +2735,35 @@ const ProjectDetail = () => {
                                         }}
                                         className="block w-full text-left px-3 py-2 text-xs text-purple-600 hover:bg-gray-50"
                                       >
-                                        Options
+                                        Choose Options
                                       </button>
+                                      {(item.status === "pending" ||
+                                        item.status === "selected") && (
+                                        <button
+                                          onClick={() => {
+                                            handleOpenSelectProduct(item);
+                                            setOpenActionMenu(null);
+                                          }}
+                                          className="block w-full text-left px-3 py-2 text-xs text-green-700 hover:bg-gray-50"
+                                        >
+                                          Select Product
+                                        </button>
+                                      )}
+                                      {getLineItemOrders(item.id).length >
+                                        0 && (
+                                        <button
+                                          onClick={() => {
+                                            toggleCategoryLineItemDetails(
+                                              item.id,
+                                            );
+                                            setOpenActionMenu(null);
+                                          }}
+                                          className="block w-full text-left px-3 py-2 text-xs text-blue-600 hover:bg-gray-50"
+                                        >
+                                          View Orders
+                                        </button>
+                                      )}
+                                      <div className="border-t border-gray-100" />
                                       <button
                                         onClick={() => {
                                           handleDeleteLineItem(item.id);
@@ -3085,19 +3451,43 @@ const ProjectDetail = () => {
                                   </td>
                                   <td className="px-2 py-1 text-center relative bg-gray-100">
                                     <button
-                                      onClick={() =>
+                                      onClick={(e) => {
+                                        const rect =
+                                          e.currentTarget.getBoundingClientRect();
+                                        const spaceBelow =
+                                          window.innerHeight - rect.bottom;
+                                        const right =
+                                          window.innerWidth - rect.right;
+                                        setMenuPos(
+                                          spaceBelow >= 110
+                                            ? { top: rect.bottom + 2, right }
+                                            : {
+                                                bottom:
+                                                  window.innerHeight -
+                                                  rect.top +
+                                                  2,
+                                                right,
+                                              },
+                                        );
                                         setOpenActionMenu(
                                           openActionMenu === item.id
                                             ? null
                                             : item.id,
-                                        )
-                                      }
+                                        );
+                                      }}
                                       className="text-lg font-bold text-gray-700 hover:text-gray-900"
                                     >
                                       ⋮
                                     </button>
                                     {openActionMenu === item.id && (
-                                      <div className="absolute right-0 bottom-full mb-1 w-32 bg-white rounded-md shadow-lg border border-gray-200 z-10">
+                                      <div
+                                        className="fixed w-32 bg-white rounded-md shadow-lg border border-gray-200 z-50"
+                                        style={{
+                                          top: menuPos.top,
+                                          bottom: menuPos.bottom,
+                                          right: menuPos.right,
+                                        }}
+                                      >
                                         <button
                                           onClick={() => {
                                             handleStartModalEdit(item);
@@ -3534,19 +3924,43 @@ const ProjectDetail = () => {
                                   </td>
                                   <td className="px-2 py-1 text-center relative bg-gray-100">
                                     <button
-                                      onClick={() =>
+                                      onClick={(e) => {
+                                        const rect =
+                                          e.currentTarget.getBoundingClientRect();
+                                        const spaceBelow =
+                                          window.innerHeight - rect.bottom;
+                                        const right =
+                                          window.innerWidth - rect.right;
+                                        setMenuPos(
+                                          spaceBelow >= 110
+                                            ? { top: rect.bottom + 2, right }
+                                            : {
+                                                bottom:
+                                                  window.innerHeight -
+                                                  rect.top +
+                                                  2,
+                                                right,
+                                              },
+                                        );
                                         setOpenActionMenu(
                                           openActionMenu === item.id
                                             ? null
                                             : item.id,
-                                        )
-                                      }
+                                        );
+                                      }}
                                       className="text-lg font-bold text-gray-700 hover:text-gray-900"
                                     >
                                       ⋮
                                     </button>
                                     {openActionMenu === item.id && (
-                                      <div className="absolute right-0 bottom-full mb-1 w-32 bg-white rounded-md shadow-lg border border-gray-200 z-10">
+                                      <div
+                                        className="fixed w-32 bg-white rounded-md shadow-lg border border-gray-200 z-50"
+                                        style={{
+                                          top: menuPos.top,
+                                          bottom: menuPos.bottom,
+                                          right: menuPos.right,
+                                        }}
+                                      >
                                         <button
                                           onClick={() => {
                                             handleStartModalEdit(item);
@@ -4322,11 +4736,36 @@ const ProjectDetail = () => {
           <div className="bg-white rounded-lg shadow-2xl border-2 border-gray-300 p-4 w-full max-w-6xl max-h-[90vh] overflow-y-auto">
             {/* Header */}
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-gray-900">
-                {selectingForLineItem
-                  ? "Select Product for Line Item"
-                  : "Insert Product into Project"}
-              </h3>
+              <div className="flex items-center gap-3">
+                <h3 className="text-sm font-semibold text-gray-900">
+                  {selectingForLineItem
+                    ? "Select Product for Line Item"
+                    : "Insert Product into Project"}
+                </h3>
+                {!selectingForLineItem && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowQuickAddProduct((v) => !v);
+                      setQuickAddProduct({
+                        name: "",
+                        manufacturerId: "",
+                        modelNumber: "",
+                        description: "",
+                        category: "",
+                        unit: "ea",
+                        tier: "",
+                        color: "",
+                      });
+                      setShowQAMfrInInsert(false);
+                      setQaInsertMfrName("");
+                    }}
+                    className="text-xs bg-indigo-600 text-white px-2 py-1 rounded hover:bg-indigo-700"
+                  >
+                    + New Product
+                  </button>
+                )}
+              </div>
               <button
                 onClick={() => {
                   setShowInsertProductModal(false);
@@ -4337,6 +4776,21 @@ const ProjectDetail = () => {
                   setFilterCategory("");
                   setFilterTier({ good: false, better: false, best: false });
                   setFilterCollection("");
+                  setFilterColor("");
+                  setInsertVendorId("");
+                  setShowQuickAddProduct(false);
+                  setQuickAddProduct({
+                    name: "",
+                    manufacturerId: "",
+                    modelNumber: "",
+                    description: "",
+                    category: "",
+                    unit: "ea",
+                    tier: "",
+                    color: "",
+                  });
+                  setShowQAMfrInInsert(false);
+                  setQaInsertMfrName("");
                 }}
                 className="text-gray-400 hover:text-gray-600 text-xl font-bold"
               >
@@ -4346,7 +4800,7 @@ const ProjectDetail = () => {
 
             {/* Filter Section */}
             <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg mb-4 space-y-3">
-              <div className="grid grid-cols-5 gap-3">
+              <div className="grid grid-cols-6 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">
                     Search
@@ -4417,6 +4871,27 @@ const ProjectDetail = () => {
                     className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Color
+                  </label>
+                  <select
+                    value={filterColor}
+                    onChange={(e) => setFilterColor(e.target.value)}
+                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="">All Colors</option>
+                    {Array.from(
+                      new Set(products.map((p) => p.color).filter(Boolean)),
+                    )
+                      .sort()
+                      .map((color) => (
+                        <option key={color} value={color}>
+                          {color}
+                        </option>
+                      ))}
+                  </select>
+                </div>
               </div>
 
               {/* Tier Filters */}
@@ -4460,7 +4935,7 @@ const ProjectDetail = () => {
 
             {/* Insert into Section & Quantity */}
             <div className="mb-4">
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-4 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">
                     {selectingForLineItem ? "Section" : "Insert into Section *"}
@@ -4495,6 +4970,23 @@ const ProjectDetail = () => {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Vendor (optional)
+                  </label>
+                  <select
+                    value={insertVendorId}
+                    onChange={(e) => setInsertVendorId(e.target.value)}
+                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="">Primary vendor</option>
+                    {vendors.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
                     Unit Cost (optional)
                   </label>
                   <input
@@ -4509,6 +5001,310 @@ const ProjectDetail = () => {
                 </div>
               </div>
             </div>
+
+            {/* Quick-Add Product Form */}
+            {showQuickAddProduct && (
+              <div className="mb-4 p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+                <div className="text-xs font-semibold text-indigo-800 mb-2">
+                  New Product
+                </div>
+                {/* Row 1: Name, Manufacturer, Model#, Category */}
+                <div className="grid grid-cols-4 gap-2 mb-2">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      autoFocus
+                      value={quickAddProduct.name}
+                      onChange={(e) =>
+                        setQuickAddProduct((prev) => ({
+                          ...prev,
+                          name: e.target.value,
+                        }))
+                      }
+                      placeholder="Product name..."
+                      className="w-full px-2 py-1 text-xs border border-indigo-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Manufacturer <span className="text-red-500">*</span>
+                    </label>
+                    <div className="flex gap-1">
+                      <select
+                        value={quickAddProduct.manufacturerId}
+                        onChange={(e) =>
+                          setQuickAddProduct((prev) => ({
+                            ...prev,
+                            manufacturerId: e.target.value,
+                          }))
+                        }
+                        className="flex-1 px-2 py-1 text-xs border border-indigo-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                      >
+                        <option value="">Select...</option>
+                        {manufacturers.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowQAMfrInInsert((v) => !v);
+                          setQaInsertMfrName("");
+                        }}
+                        className="px-2 py-1 text-xs bg-white text-indigo-700 border border-indigo-300 rounded-md hover:bg-indigo-100"
+                        title="Add new manufacturer"
+                      >
+                        +
+                      </button>
+                    </div>
+                    {/* Nested quick-add manufacturer strip */}
+                    {showQAMfrInInsert && (
+                      <div className="mt-1 p-1.5 bg-white border border-indigo-200 rounded-md flex items-center gap-1">
+                        <input
+                          type="text"
+                          autoFocus
+                          placeholder="Manufacturer name..."
+                          value={qaInsertMfrName}
+                          onChange={(e) => setQaInsertMfrName(e.target.value)}
+                          onKeyDown={async (e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              if (!qaInsertMfrName.trim() || qaInsertMfrSaving)
+                                return;
+                              setQaInsertMfrSaving(true);
+                              try {
+                                const created =
+                                  await manufacturerService.createManufacturer({
+                                    name: qaInsertMfrName.trim(),
+                                  });
+                                setManufacturers((prev) =>
+                                  [...prev, created].sort((a, b) =>
+                                    a.name.localeCompare(b.name),
+                                  ),
+                                );
+                                setQuickAddProduct((prev) => ({
+                                  ...prev,
+                                  manufacturerId: created.id,
+                                }));
+                                setShowQAMfrInInsert(false);
+                                setQaInsertMfrName("");
+                              } catch {
+                                /* leave open on error */
+                              } finally {
+                                setQaInsertMfrSaving(false);
+                              }
+                            }
+                            if (e.key === "Escape") {
+                              setShowQAMfrInInsert(false);
+                              setQaInsertMfrName("");
+                            }
+                          }}
+                          className="flex-1 px-2 py-1 text-xs border border-indigo-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                        />
+                        <button
+                          type="button"
+                          disabled={
+                            !qaInsertMfrName.trim() || qaInsertMfrSaving
+                          }
+                          onClick={async () => {
+                            if (!qaInsertMfrName.trim() || qaInsertMfrSaving)
+                              return;
+                            setQaInsertMfrSaving(true);
+                            try {
+                              const created =
+                                await manufacturerService.createManufacturer({
+                                  name: qaInsertMfrName.trim(),
+                                });
+                              setManufacturers((prev) =>
+                                [...prev, created].sort((a, b) =>
+                                  a.name.localeCompare(b.name),
+                                ),
+                              );
+                              setQuickAddProduct((prev) => ({
+                                ...prev,
+                                manufacturerId: created.id,
+                              }));
+                              setShowQAMfrInInsert(false);
+                              setQaInsertMfrName("");
+                            } catch {
+                              /* leave open on error */
+                            } finally {
+                              setQaInsertMfrSaving(false);
+                            }
+                          }}
+                          className="px-2 py-1 text-xs bg-indigo-600 text-white rounded disabled:opacity-40"
+                        >
+                          {qaInsertMfrSaving ? "..." : "Save"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowQAMfrInInsert(false);
+                            setQaInsertMfrName("");
+                          }}
+                          className="px-1 py-1 text-xs text-gray-500 hover:text-gray-700"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Model #
+                    </label>
+                    <input
+                      type="text"
+                      value={quickAddProduct.modelNumber}
+                      onChange={(e) =>
+                        setQuickAddProduct((prev) => ({
+                          ...prev,
+                          modelNumber: e.target.value,
+                        }))
+                      }
+                      placeholder="Optional..."
+                      className="w-full px-2 py-1 text-xs border border-indigo-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Category
+                    </label>
+                    <input
+                      type="text"
+                      value={quickAddProduct.category}
+                      onChange={(e) =>
+                        setQuickAddProduct((prev) => ({
+                          ...prev,
+                          category: e.target.value,
+                        }))
+                      }
+                      placeholder="Optional..."
+                      className="w-full px-2 py-1 text-xs border border-indigo-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+                {/* Row 2: Description, Color, Unit, Tier */}
+                <div className="grid grid-cols-4 gap-2 mb-2">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Description
+                    </label>
+                    <input
+                      type="text"
+                      value={quickAddProduct.description}
+                      onChange={(e) =>
+                        setQuickAddProduct((prev) => ({
+                          ...prev,
+                          description: e.target.value,
+                        }))
+                      }
+                      placeholder="Optional..."
+                      className="w-full px-2 py-1 text-xs border border-indigo-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Color
+                    </label>
+                    <input
+                      type="text"
+                      value={quickAddProduct.color}
+                      onChange={(e) =>
+                        setQuickAddProduct((prev) => ({
+                          ...prev,
+                          color: e.target.value,
+                        }))
+                      }
+                      placeholder="Optional..."
+                      className="w-full px-2 py-1 text-xs border border-indigo-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Unit
+                    </label>
+                    <input
+                      type="text"
+                      value={quickAddProduct.unit}
+                      onChange={(e) =>
+                        setQuickAddProduct((prev) => ({
+                          ...prev,
+                          unit: e.target.value,
+                        }))
+                      }
+                      placeholder="ea"
+                      className="w-full px-2 py-1 text-xs border border-indigo-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Tier
+                    </label>
+                    <select
+                      value={quickAddProduct.tier}
+                      onChange={(e) =>
+                        setQuickAddProduct((prev) => ({
+                          ...prev,
+                          tier: e.target.value as
+                            | ""
+                            | "good"
+                            | "better"
+                            | "best",
+                        }))
+                      }
+                      className="w-full px-2 py-1 text-xs border border-indigo-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="">None</option>
+                      <option value="good">Good</option>
+                      <option value="better">Better</option>
+                      <option value="best">Best</option>
+                    </select>
+                  </div>
+                </div>
+                {/* Action buttons */}
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={handleQuickAddProduct}
+                    disabled={
+                      !quickAddProduct.name.trim() ||
+                      !quickAddProduct.manufacturerId ||
+                      quickAddProductSaving
+                    }
+                    className="px-3 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-40"
+                  >
+                    {quickAddProductSaving ? "Saving..." : "Save Product"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowQuickAddProduct(false);
+                      setQuickAddProduct({
+                        name: "",
+                        manufacturerId: "",
+                        modelNumber: "",
+                        description: "",
+                        category: "",
+                        unit: "ea",
+                        tier: "",
+                        color: "",
+                      });
+                      setShowQAMfrInInsert(false);
+                      setQaInsertMfrName("");
+                    }}
+                    className="px-3 py-1 text-xs text-gray-600 hover:text-gray-900"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Products Table */}
             <div className="border rounded-md overflow-hidden">
@@ -4607,6 +5403,13 @@ const ProjectDetail = () => {
                         );
                       }
 
+                      // Color filter
+                      if (filterColor) {
+                        filtered = filtered.filter(
+                          (p) => p.color === filterColor,
+                        );
+                      }
+
                       // Vendor filter - only show products that have this vendor
                       if (filterVendorId) {
                         const productIdsForVendor = productVendors
@@ -4648,7 +5451,10 @@ const ProjectDetail = () => {
                             productVendorList[0];
 
                           return (
-                            <tr key={product.id} className="hover:bg-gray-50">
+                            <tr
+                              key={product.id}
+                              className="hover:bg-gray-50 relative"
+                            >
                               <td className="px-3 py-2 text-xs text-gray-900">
                                 <div className="font-medium">
                                   {product.name}
@@ -4659,8 +5465,148 @@ const ProjectDetail = () => {
                                   </div>
                                 )}
                               </td>
-                              <td className="px-3 py-2 text-xs text-gray-600">
+                              <td
+                                className="px-3 py-2 text-xs text-gray-600 cursor-help"
+                                onMouseEnter={(e) => {
+                                  setHoverInsertProduct(product.id);
+                                  const spaceRight =
+                                    window.innerWidth - e.clientX;
+                                  const spaceBelow =
+                                    window.innerHeight - e.clientY;
+                                  setTooltipInsertPos({
+                                    left:
+                                      spaceRight >= 336
+                                        ? e.clientX + 16
+                                        : undefined,
+                                    right:
+                                      spaceRight < 336
+                                        ? window.innerWidth - e.clientX + 16
+                                        : undefined,
+                                    top:
+                                      spaceBelow >= 280
+                                        ? e.clientY + 16
+                                        : undefined,
+                                    bottom:
+                                      spaceBelow < 280
+                                        ? window.innerHeight - e.clientY + 16
+                                        : undefined,
+                                  });
+                                }}
+                                onMouseLeave={() => setHoverInsertProduct(null)}
+                              >
                                 {product.modelNumber || "-"}
+                                {hoverInsertProduct === product.id && (
+                                  <div
+                                    className="fixed z-50 pointer-events-none"
+                                    style={{
+                                      left: tooltipInsertPos.left,
+                                      right: tooltipInsertPos.right,
+                                      top: tooltipInsertPos.top,
+                                      bottom: tooltipInsertPos.bottom,
+                                    }}
+                                  >
+                                    <div className="bg-white border border-gray-300 rounded-lg shadow-xl p-3 w-80 text-xs">
+                                      <div className="font-semibold text-gray-900 mb-1">
+                                        {product.name}
+                                      </div>
+                                      {product.description && (
+                                        <div className="text-gray-600 mb-2">
+                                          {product.description}
+                                        </div>
+                                      )}
+                                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-gray-700">
+                                        {product.modelNumber && (
+                                          <>
+                                            <span className="text-gray-500">
+                                              Model:
+                                            </span>
+                                            <span>{product.modelNumber}</span>
+                                          </>
+                                        )}
+                                        {manufacturer?.name && (
+                                          <>
+                                            <span className="text-gray-500">
+                                              Manufacturer:
+                                            </span>
+                                            <span>{manufacturer.name}</span>
+                                          </>
+                                        )}
+                                        {product.category && (
+                                          <>
+                                            <span className="text-gray-500">
+                                              Category:
+                                            </span>
+                                            <span>{product.category}</span>
+                                          </>
+                                        )}
+                                        {product.color && (
+                                          <>
+                                            <span className="text-gray-500">
+                                              Color:
+                                            </span>
+                                            <span>{product.color}</span>
+                                          </>
+                                        )}
+                                        {product.tier && (
+                                          <>
+                                            <span className="text-gray-500">
+                                              Tier:
+                                            </span>
+                                            <span className="capitalize">
+                                              {product.tier}
+                                            </span>
+                                          </>
+                                        )}
+                                        {product.collection && (
+                                          <>
+                                            <span className="text-gray-500">
+                                              Collection:
+                                            </span>
+                                            <span>{product.collection}</span>
+                                          </>
+                                        )}
+                                        {product.unit && (
+                                          <>
+                                            <span className="text-gray-500">
+                                              Unit:
+                                            </span>
+                                            <span>{product.unit}</span>
+                                          </>
+                                        )}
+                                      </div>
+                                      {productVendorList.length > 0 && (
+                                        <div className="mt-2 border-t pt-2">
+                                          <div className="text-gray-500 mb-1">
+                                            Vendors &amp; Pricing:
+                                          </div>
+                                          {productVendorList.map((pv) => {
+                                            const v = vendors.find(
+                                              (vv) => vv.id === pv.vendorId,
+                                            );
+                                            return (
+                                              <div
+                                                key={pv.id}
+                                                className="flex justify-between items-center"
+                                              >
+                                                <span>
+                                                  {v?.name}
+                                                  {pv.isPrimary && (
+                                                    <span className="ml-1 text-yellow-600">
+                                                      ★
+                                                    </span>
+                                                  )}
+                                                </span>
+                                                <span className="font-medium">
+                                                  ${pv.cost.toFixed(2)}
+                                                </span>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
                               </td>
                               <td className="px-3 py-2 text-xs text-gray-600">
                                 {manufacturer?.name || "-"}
@@ -4750,6 +5696,21 @@ const ProjectDetail = () => {
                   setFilterCategory("");
                   setFilterTier({ good: false, better: false, best: false });
                   setFilterCollection("");
+                  setFilterColor("");
+                  setInsertVendorId("");
+                  setShowQuickAddProduct(false);
+                  setQuickAddProduct({
+                    name: "",
+                    manufacturerId: "",
+                    modelNumber: "",
+                    description: "",
+                    category: "",
+                    unit: "ea",
+                    tier: "",
+                    color: "",
+                  });
+                  setShowQAMfrInInsert(false);
+                  setQaInsertMfrName("");
                 }}
                 className="px-3 py-1 text-xs text-gray-700 hover:text-gray-900"
               >

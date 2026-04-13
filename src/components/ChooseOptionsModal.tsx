@@ -35,11 +35,21 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
   const [filterManufacturerId, setFilterManufacturerId] = useState("");
   const [filterCategory, setFilterCategory] = useState("");
   const [filterCollection, setFilterCollection] = useState("");
+  const [filterColor, setFilterColor] = useState("");
   const [filterTier, setFilterTier] = useState({
     good: false,
     better: false,
     best: false,
   });
+
+  // Hover state for product tooltip
+  const [hoverProduct, setHoverProduct] = useState<string | null>(null);
+  const [tooltipPos, setTooltipPos] = useState<{
+    left?: number;
+    right?: number;
+    top?: number;
+    bottom?: number;
+  }>({});
 
   // Selected options state
   const [selectedOptions, setSelectedOptions] = useState<LineItemOption[]>([]);
@@ -145,6 +155,46 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
     }
   };
 
+  // Select a product option and immediately mark the line item as "final"
+  const handleSelectOptionAsFinal = async (option: LineItemOption) => {
+    try {
+      const product = products.find((p) => p.id === option.productId);
+      if (!product) {
+        alert("Product not found");
+        return;
+      }
+
+      const productVendorList = productVendors.filter(
+        (pv) => pv.productId === product.id,
+      );
+      const primaryPV =
+        productVendorList.find((pv) => pv.isPrimary) || productVendorList[0];
+
+      await lineItemOptionService.selectOption(lineItem.id, {
+        productId: product.id,
+        unitCost: option.unitCost,
+      });
+
+      // Set status to "final" instead of "selected"
+      await lineItemService.update(lineItem.id, {
+        productId: product.id,
+        modelNumber: product.modelNumber,
+        manufacturerId: product.manufacturerId,
+        vendorId: primaryPV?.vendorId,
+        unitCost: option.unitCost,
+        unit: product.unit || "",
+        material: product.description || "",
+        status: "final",
+      });
+
+      await loadOptions();
+      onOptionsChanged();
+    } catch (error) {
+      console.error("Error selecting option as final:", error);
+      alert("Failed to select option as final");
+    }
+  };
+
   // Deselect the current option
   const handleDeselectOption = async (option: LineItemOption) => {
     try {
@@ -234,6 +284,11 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
       filtered = filtered.filter((p) =>
         p.collection?.toLowerCase().includes(collectionSearch),
       );
+    }
+
+    // Color filter
+    if (filterColor) {
+      filtered = filtered.filter((p) => p.color === filterColor);
     }
 
     // Vendor filter
@@ -434,6 +489,14 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
                                   Select
                                 </button>
                                 <button
+                                  onClick={() =>
+                                    handleSelectOptionAsFinal(option)
+                                  }
+                                  className="bg-teal-600 text-white px-3 py-1 rounded text-xs hover:bg-teal-700"
+                                >
+                                  Final
+                                </button>
+                                <button
                                   onClick={() => handleRemoveOption(option.id)}
                                   className="bg-red-600 text-white px-3 py-1 rounded text-xs hover:bg-red-700"
                                 >
@@ -454,7 +517,7 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
 
         {/* Filter Section */}
         <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg mb-4 space-y-3">
-          <div className="grid grid-cols-5 gap-3">
+          <div className="grid grid-cols-6 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
                 Search
@@ -524,7 +587,28 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
                 placeholder="Filter by collection..."
                 className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
               />
-            </div>
+            </div>{" "}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Color
+              </label>
+              <select
+                value={filterColor}
+                onChange={(e) => setFilterColor(e.target.value)}
+                className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="">All Colors</option>
+                {Array.from(
+                  new Set(products.map((p) => p.color).filter(Boolean)),
+                )
+                  .sort()
+                  .map((color) => (
+                    <option key={color} value={color}>
+                      {color}
+                    </option>
+                  ))}
+              </select>
+            </div>{" "}
           </div>
 
           {/* Tier Checkboxes */}
@@ -618,9 +702,9 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
                     return (
                       <tr
                         key={product.id}
-                        className={
+                        className={`relative ${
                           alreadySelected ? "bg-green-50" : "hover:bg-gray-50"
-                        }
+                        }`}
                       >
                         <td className="px-3 py-2 text-xs text-gray-900">
                           <div className="font-medium">{product.name}</div>
@@ -630,8 +714,142 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
                             </div>
                           )}
                         </td>
-                        <td className="px-3 py-2 text-xs text-gray-600">
+                        <td
+                          className="px-3 py-2 text-xs text-gray-600 cursor-help"
+                          onMouseEnter={(e) => {
+                            setHoverProduct(product.id);
+                            const spaceRight = window.innerWidth - e.clientX;
+                            const spaceBelow = window.innerHeight - e.clientY;
+                            setTooltipPos({
+                              left:
+                                spaceRight >= 336 ? e.clientX + 16 : undefined,
+                              right:
+                                spaceRight < 336
+                                  ? window.innerWidth - e.clientX + 16
+                                  : undefined,
+                              top:
+                                spaceBelow >= 280 ? e.clientY + 16 : undefined,
+                              bottom:
+                                spaceBelow < 280
+                                  ? window.innerHeight - e.clientY + 16
+                                  : undefined,
+                            });
+                          }}
+                          onMouseLeave={() => setHoverProduct(null)}
+                        >
                           {product.modelNumber || "-"}
+                          {hoverProduct === product.id && (
+                            <div
+                              className="fixed z-50 pointer-events-none"
+                              style={{
+                                left: tooltipPos.left,
+                                right: tooltipPos.right,
+                                top: tooltipPos.top,
+                                bottom: tooltipPos.bottom,
+                              }}
+                            >
+                              <div className="bg-white border border-gray-300 rounded-lg shadow-xl p-3 w-80 text-xs">
+                                <div className="font-semibold text-gray-900 mb-1">
+                                  {product.name}
+                                </div>
+                                {product.description && (
+                                  <div className="text-gray-600 mb-2">
+                                    {product.description}
+                                  </div>
+                                )}
+                                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-gray-700">
+                                  {product.modelNumber && (
+                                    <>
+                                      <span className="text-gray-500">
+                                        Model:
+                                      </span>
+                                      <span>{product.modelNumber}</span>
+                                    </>
+                                  )}
+                                  {manufacturer?.name && (
+                                    <>
+                                      <span className="text-gray-500">
+                                        Manufacturer:
+                                      </span>
+                                      <span>{manufacturer.name}</span>
+                                    </>
+                                  )}
+                                  {product.category && (
+                                    <>
+                                      <span className="text-gray-500">
+                                        Category:
+                                      </span>
+                                      <span>{product.category}</span>
+                                    </>
+                                  )}
+                                  {product.color && (
+                                    <>
+                                      <span className="text-gray-500">
+                                        Color:
+                                      </span>
+                                      <span>{product.color}</span>
+                                    </>
+                                  )}
+                                  {product.tier && (
+                                    <>
+                                      <span className="text-gray-500">
+                                        Tier:
+                                      </span>
+                                      <span className="capitalize">
+                                        {product.tier}
+                                      </span>
+                                    </>
+                                  )}
+                                  {product.collection && (
+                                    <>
+                                      <span className="text-gray-500">
+                                        Collection:
+                                      </span>
+                                      <span>{product.collection}</span>
+                                    </>
+                                  )}
+                                  {product.unit && (
+                                    <>
+                                      <span className="text-gray-500">
+                                        Unit:
+                                      </span>
+                                      <span>{product.unit}</span>
+                                    </>
+                                  )}
+                                </div>
+                                {productVendorList.length > 0 && (
+                                  <div className="mt-2 border-t pt-2">
+                                    <div className="text-gray-500 mb-1">
+                                      Vendors &amp; Pricing:
+                                    </div>
+                                    {productVendorList.map((pv) => {
+                                      const v = vendors.find(
+                                        (vv) => vv.id === pv.vendorId,
+                                      );
+                                      return (
+                                        <div
+                                          key={pv.id}
+                                          className="flex justify-between items-center"
+                                        >
+                                          <span>
+                                            {v?.name}
+                                            {pv.isPrimary && (
+                                              <span className="ml-1 text-yellow-600">
+                                                ★
+                                              </span>
+                                            )}
+                                          </span>
+                                          <span className="font-medium">
+                                            ${pv.cost.toFixed(2)}
+                                          </span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </td>
                         <td className="px-3 py-2 text-xs text-gray-600">
                           {manufacturer?.name || "-"}

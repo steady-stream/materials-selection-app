@@ -26,6 +26,7 @@ const ProductList = () => {
     better: false,
     best: false,
   });
+  const [colorFilter, setColorFilter] = useState<string>("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
@@ -40,6 +41,22 @@ const ProductList = () => {
     cost: 0,
     sku: "",
   });
+  const [openProductMenu, setOpenProductMenu] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{
+    top?: number;
+    bottom?: number;
+    right: number;
+  }>({ right: 0 });
+  const [hoverProduct, setHoverProduct] = useState<string | null>(null);
+  const [tooltipPos, setTooltipPos] = useState<{
+    left?: number;
+    right?: number;
+    top?: number;
+    bottom?: number;
+  }>({});
+  const [showQuickAddMfr, setShowQuickAddMfr] = useState(false);
+  const [quickAddMfrName, setQuickAddMfrName] = useState("");
+  const [quickAddMfrSaving, setQuickAddMfrSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState({
@@ -51,6 +68,7 @@ const ProductList = () => {
     unit: "ea",
     tier: "" as "" | "good" | "better" | "best",
     collection: "",
+    color: "",
     imageUrl: "",
     productUrl: "",
   });
@@ -110,6 +128,7 @@ const ProductList = () => {
         unit: product.unit || "ea",
         tier: (product.tier || "") as "" | "good" | "better" | "best",
         collection: product.collection || "",
+        color: product.color || "",
         imageUrl: product.imageUrl || "",
         productUrl: product.productUrl || "",
       });
@@ -127,6 +146,7 @@ const ProductList = () => {
         unit: "ea",
         tier: "" as "" | "good" | "better" | "best",
         collection: "",
+        color: "",
         imageUrl: "",
         productUrl: "",
       });
@@ -140,6 +160,8 @@ const ProductList = () => {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingProduct(null);
+    setShowQuickAddMfr(false);
+    setQuickAddMfrName("");
     setFormData({
       manufacturerId: "",
       name: "",
@@ -149,12 +171,35 @@ const ProductList = () => {
       unit: "ea",
       tier: "" as "" | "good" | "better" | "best",
       collection: "",
+      color: "",
       imageUrl: "",
       productUrl: "",
     });
     setPrimaryVendorId("");
     setPrimaryVendorSku("");
     setPrimaryVendorCost("");
+  };
+
+  // Clone opens the Add modal pre-populated with the source product's fields
+  const handleClone = (product: Product) => {
+    setEditingProduct(null);
+    setFormData({
+      manufacturerId: product.manufacturerId || "",
+      name: `Copy of ${product.name}`,
+      modelNumber: product.modelNumber || "",
+      description: product.description || "",
+      category: product.category || "",
+      unit: product.unit || "ea",
+      tier: (product.tier || "") as "" | "good" | "better" | "best",
+      collection: product.collection || "",
+      color: product.color || "",
+      imageUrl: product.imageUrl || "",
+      productUrl: product.productUrl || "",
+    });
+    setPrimaryVendorId("");
+    setPrimaryVendorSku("");
+    setPrimaryVendorCost("");
+    setIsModalOpen(true);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -431,6 +476,9 @@ const ProductList = () => {
       if (product.tier === "best" && !tierFilters.best) return false;
     }
 
+    // Filter by color
+    if (colorFilter && product.color !== colorFilter) return false;
+
     // Filter by search term
     if (searchTerm) {
       const search = searchTerm.toLowerCase();
@@ -446,6 +494,7 @@ const ProductList = () => {
         product.modelNumber?.toLowerCase().includes(search) ||
         product.description?.toLowerCase().includes(search) ||
         product.category?.toLowerCase().includes(search) ||
+        product.color?.toLowerCase().includes(search) ||
         manufacturer?.name.toLowerCase().includes(search) ||
         vendorNames.toLowerCase().includes(search)
       );
@@ -624,6 +673,24 @@ const ProductList = () => {
             <span>Best</span>
           </label>
         </div>
+        {/* Color Filter */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-600 font-medium">Color:</span>
+          <select
+            value={colorFilter}
+            onChange={(e) => setColorFilter(e.target.value)}
+            className="px-2 py-1 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="">All Colors</option>
+            {Array.from(new Set(products.map((p) => p.color).filter(Boolean)))
+              .sort()
+              .map((color) => (
+                <option key={color} value={color}>
+                  {color}
+                </option>
+              ))}
+          </select>
+        </div>
       </div>
 
       {/* Search */}
@@ -703,7 +770,7 @@ const ProductList = () => {
                 return (
                   <tr
                     key={product.id}
-                    className="hover:bg-gray-50 border-b border-gray-200"
+                    className="hover:bg-gray-50 border-b border-gray-200 relative group"
                   >
                     <td className="px-2 py-1">
                       <div className="font-medium text-gray-900">
@@ -715,7 +782,27 @@ const ProductList = () => {
                         </div>
                       )}
                     </td>
-                    <td className="px-2 py-1 text-gray-900">
+                    <td
+                      className="px-2 py-1 text-gray-900 cursor-help"
+                      onMouseEnter={(e) => {
+                        setHoverProduct(product.id);
+                        const spaceRight = window.innerWidth - e.clientX;
+                        const spaceBelow = window.innerHeight - e.clientY;
+                        setTooltipPos({
+                          left: spaceRight >= 400 ? e.clientX + 16 : undefined,
+                          right:
+                            spaceRight < 400
+                              ? window.innerWidth - e.clientX + 16
+                              : undefined,
+                          top: spaceBelow >= 280 ? e.clientY + 16 : undefined,
+                          bottom:
+                            spaceBelow < 280
+                              ? window.innerHeight - e.clientY + 16
+                              : undefined,
+                        });
+                      }}
+                      onMouseLeave={() => setHoverProduct(null)}
+                    >
                       {product.modelNumber || "-"}
                     </td>
                     <td className="px-2 py-1 text-gray-900">
@@ -803,26 +890,208 @@ const ProductList = () => {
                         )}
                       </div>
                     </td>
-                    <td className="px-2 py-1 text-right space-x-2">
+                    <td className="px-2 py-1 text-center relative">
                       <button
-                        onClick={() => handleOpenVendorModal(product)}
-                        className="text-green-600 hover:text-green-900"
+                        onClick={(e) => {
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const spaceBelow = window.innerHeight - rect.bottom;
+                          const right = window.innerWidth - rect.right;
+                          setMenuPos(
+                            spaceBelow >= 160
+                              ? { top: rect.bottom + 2, right }
+                              : {
+                                  bottom: window.innerHeight - rect.top + 2,
+                                  right,
+                                },
+                          );
+                          setOpenProductMenu(
+                            openProductMenu === product.id ? null : product.id,
+                          );
+                        }}
+                        className="text-lg font-bold text-gray-500 hover:text-gray-800 px-2"
+                        title="Actions"
                       >
-                        Vendors
+                        ⋮
                       </button>
-                      <button
-                        onClick={() => handleOpenModal(product)}
-                        className="text-indigo-600 hover:text-indigo-900"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(product.id)}
-                        className="text-red-600 hover:text-red-900"
-                      >
-                        Delete
-                      </button>
+                      {openProductMenu === product.id && (
+                        <div
+                          className="fixed w-36 bg-white rounded-md shadow-lg border border-gray-200 z-50"
+                          style={{
+                            top: menuPos.top,
+                            bottom: menuPos.bottom,
+                            right: menuPos.right,
+                          }}
+                        >
+                          <button
+                            onClick={() => {
+                              handleOpenModal(product);
+                              setOpenProductMenu(null);
+                            }}
+                            className="block w-full text-left px-3 py-2 text-xs text-indigo-600 hover:bg-gray-50"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => {
+                              handleOpenVendorModal(product);
+                              setOpenProductMenu(null);
+                            }}
+                            className="block w-full text-left px-3 py-2 text-xs text-green-700 hover:bg-gray-50"
+                          >
+                            Manage Vendors
+                          </button>
+                          <button
+                            onClick={() => {
+                              handleClone(product);
+                              setOpenProductMenu(null);
+                            }}
+                            className="block w-full text-left px-3 py-2 text-xs text-purple-600 hover:bg-gray-50"
+                          >
+                            Clone
+                          </button>
+                          <div className="border-t border-gray-100" />
+                          <button
+                            onClick={() => {
+                              handleDelete(product.id);
+                              setOpenProductMenu(null);
+                            }}
+                            className="block w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-gray-50"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      )}
                     </td>
+                    {/* Hover tooltip — shows full product details */}
+                    {hoverProduct === product.id && (
+                      <td
+                        className="p-0 fixed z-50 pointer-events-none"
+                        style={{
+                          left: tooltipPos.left,
+                          right: tooltipPos.right,
+                          top: tooltipPos.top,
+                          bottom: tooltipPos.bottom,
+                        }}
+                      >
+                        <div className="bg-white border border-gray-300 rounded-lg shadow-xl p-3 w-96 text-xs">
+                          <div className="font-semibold text-gray-900 mb-1">
+                            {product.name}
+                          </div>
+                          {product.description && (
+                            <div className="text-gray-600 mb-2">
+                              {product.description}
+                            </div>
+                          )}
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-gray-700">
+                            {product.modelNumber && (
+                              <>
+                                <span className="text-gray-500">Model:</span>
+                                <span>{product.modelNumber}</span>
+                              </>
+                            )}
+                            {manufacturer?.name && (
+                              <>
+                                <span className="text-gray-500">
+                                  Manufacturer:
+                                </span>
+                                <span>{manufacturer.name}</span>
+                              </>
+                            )}
+                            {product.category && (
+                              <>
+                                <span className="text-gray-500">Category:</span>
+                                <span>{product.category}</span>
+                              </>
+                            )}
+                            {product.unit && (
+                              <>
+                                <span className="text-gray-500">Unit:</span>
+                                <span>{product.unit}</span>
+                              </>
+                            )}
+                            {product.tier && (
+                              <>
+                                <span className="text-gray-500">Tier:</span>
+                                <span className="capitalize">
+                                  {product.tier}
+                                </span>
+                              </>
+                            )}
+                            {product.collection && (
+                              <>
+                                <span className="text-gray-500">
+                                  Collection:
+                                </span>
+                                <span>{product.collection}</span>
+                              </>
+                            )}
+                            {product.color && (
+                              <>
+                                <span className="text-gray-500">Color:</span>
+                                <span>{product.color}</span>
+                              </>
+                            )}
+                          </div>
+                          {productVendorList.length > 0 && (
+                            <div className="mt-2 border-t pt-2">
+                              <div className="text-gray-500 mb-1">
+                                Vendors &amp; Pricing:
+                              </div>
+                              {productVendorList.map((pv) => {
+                                const v = vendors.find(
+                                  (vv) => vv.id === pv.vendorId,
+                                );
+                                return (
+                                  <div
+                                    key={pv.id}
+                                    className="flex justify-between items-center"
+                                  >
+                                    <span>
+                                      {v?.name}
+                                      {pv.isPrimary && (
+                                        <span className="ml-1 text-yellow-600">
+                                          ★
+                                        </span>
+                                      )}
+                                      {pv.sku && (
+                                        <span className="ml-1 text-gray-400">
+                                          SKU: {pv.sku}
+                                        </span>
+                                      )}
+                                    </span>
+                                    <span className="font-medium">
+                                      ${pv.cost.toFixed(2)}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                          <div className="mt-2 flex gap-3">
+                            {product.productUrl && (
+                              <a
+                                href={product.productUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="pointer-events-auto text-indigo-600 hover:underline"
+                              >
+                                Product page ↗
+                              </a>
+                            )}
+                            {product.imageUrl && (
+                              <a
+                                href={product.imageUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="pointer-events-auto text-indigo-600 hover:underline"
+                              >
+                                Image ↗
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
@@ -844,24 +1113,126 @@ const ProductList = () => {
                   <label className="block text-xs font-medium text-gray-700 mb-1">
                     Manufacturer *
                   </label>
-                  <select
-                    required
-                    value={formData.manufacturerId}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        manufacturerId: e.target.value,
-                      })
-                    }
-                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="">Select Manufacturer...</option>
-                    {manufacturers.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex items-center gap-1">
+                    <select
+                      required
+                      value={formData.manufacturerId}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          manufacturerId: e.target.value,
+                        })
+                      }
+                      className="flex-1 px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="">Select Manufacturer...</option>
+                      {manufacturers.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowQuickAddMfr((v) => !v);
+                        setQuickAddMfrName("");
+                      }}
+                      className="px-2 py-1 text-xs bg-indigo-50 text-indigo-700 border border-indigo-300 rounded-md hover:bg-indigo-100"
+                      title="Add new manufacturer"
+                    >
+                      +
+                    </button>
+                  </div>
+                  {/* Quick-add manufacturer inline form */}
+                  {showQuickAddMfr && (
+                    <div className="mt-2 p-2 bg-indigo-50 border border-indigo-200 rounded-md flex items-center gap-2">
+                      <input
+                        type="text"
+                        autoFocus
+                        placeholder="New manufacturer name..."
+                        value={quickAddMfrName}
+                        onChange={(e) => setQuickAddMfrName(e.target.value)}
+                        onKeyDown={async (e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            if (!quickAddMfrName.trim() || quickAddMfrSaving)
+                              return;
+                            setQuickAddMfrSaving(true);
+                            try {
+                              const created =
+                                await manufacturerService.createManufacturer({
+                                  name: quickAddMfrName.trim(),
+                                });
+                              setManufacturers((prev) =>
+                                [...prev, created].sort((a, b) =>
+                                  a.name.localeCompare(b.name),
+                                ),
+                              );
+                              setFormData((prev) => ({
+                                ...prev,
+                                manufacturerId: created.id,
+                              }));
+                              setShowQuickAddMfr(false);
+                              setQuickAddMfrName("");
+                            } catch {
+                              // leave open on error
+                            } finally {
+                              setQuickAddMfrSaving(false);
+                            }
+                          }
+                          if (e.key === "Escape") {
+                            setShowQuickAddMfr(false);
+                            setQuickAddMfrName("");
+                          }
+                        }}
+                        className="flex-1 px-2 py-1 text-xs border border-indigo-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                      />
+                      <button
+                        type="button"
+                        disabled={!quickAddMfrName.trim() || quickAddMfrSaving}
+                        onClick={async () => {
+                          if (!quickAddMfrName.trim() || quickAddMfrSaving)
+                            return;
+                          setQuickAddMfrSaving(true);
+                          try {
+                            const created =
+                              await manufacturerService.createManufacturer({
+                                name: quickAddMfrName.trim(),
+                              });
+                            setManufacturers((prev) =>
+                              [...prev, created].sort((a, b) =>
+                                a.name.localeCompare(b.name),
+                              ),
+                            );
+                            setFormData((prev) => ({
+                              ...prev,
+                              manufacturerId: created.id,
+                            }));
+                            setShowQuickAddMfr(false);
+                            setQuickAddMfrName("");
+                          } catch {
+                            // leave open on error
+                          } finally {
+                            setQuickAddMfrSaving(false);
+                          }
+                        }}
+                        className="px-2 py-1 text-xs bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50"
+                      >
+                        {quickAddMfrSaving ? "..." : "Save"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowQuickAddMfr(false);
+                          setQuickAddMfrName("");
+                        }}
+                        className="px-2 py-1 text-xs text-gray-600 hover:text-gray-900"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div className="col-span-2">
                   <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -895,6 +1266,7 @@ const ProductList = () => {
                     Category
                   </label>
                   <input
+                    list="product-categories"
                     type="text"
                     value={formData.category}
                     onChange={(e) =>
@@ -902,6 +1274,28 @@ const ProductList = () => {
                     }
                     className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
                   />
+                  <datalist id="product-categories">
+                    <option value="Cabinets" />
+                    <option value="Countertops" />
+                    <option value="Doors" />
+                    <option value="Electrical" />
+                    <option value="Faucets" />
+                    <option value="Floor Tile" />
+                    <option value="Flooring" />
+                    <option value="Hardware" />
+                    <option value="HVAC" />
+                    <option value="Lighting" />
+                    <option value="Mirrors" />
+                    <option value="Paint" />
+                    <option value="Plumbing" />
+                    <option value="Plumbing Fixtures" />
+                    <option value="Shower" />
+                    <option value="Tile" />
+                    <option value="Trim" />
+                    <option value="Vanity" />
+                    <option value="Wall Tile" />
+                    <option value="Windows" />
+                  </datalist>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -915,6 +1309,7 @@ const ProductList = () => {
                     className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
                   >
                     <option value="ea">ea</option>
+                    <option value="pc">pc</option>
                     <option value="case">case</option>
                     <option value="box">box</option>
                     <option value="bag">bag</option>
@@ -962,6 +1357,48 @@ const ProductList = () => {
                     placeholder="e.g., Artisan Series, Pro Collection"
                     className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
                   />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Color
+                  </label>
+                  <input
+                    type="text"
+                    list="product-colors"
+                    value={formData.color}
+                    onChange={(e) =>
+                      setFormData({ ...formData, color: e.target.value })
+                    }
+                    placeholder="e.g., White, Chrome, Brushed Nickel"
+                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <datalist id="product-colors">
+                    <option value="White" />
+                    <option value="Off-White" />
+                    <option value="Almond" />
+                    <option value="Bone" />
+                    <option value="Biscuit" />
+                    <option value="Black" />
+                    <option value="Dark Bronze" />
+                    <option value="Oil-Rubbed Bronze" />
+                    <option value="Chrome" />
+                    <option value="Brushed Nickel" />
+                    <option value="Polished Nickel" />
+                    <option value="Stainless Steel" />
+                    <option value="Gold" />
+                    <option value="Brushed Brass" />
+                    <option value="Polished Brass" />
+                    <option value="Gray" />
+                    <option value="Slate" />
+                    <option value="Charcoal" />
+                    <option value="Beige" />
+                    <option value="Tan" />
+                    <option value="Brown" />
+                    <option value="Espresso" />
+                    <option value="Walnut" />
+                    <option value="Natural" />
+                    <option value="Clear" />
+                  </datalist>
                 </div>
                 <div className="col-span-2">
                   <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -1060,6 +1497,30 @@ const ProductList = () => {
                       </div>
                     </div>
                   </>
+                )}
+                {editingProduct && (
+                  <div className="col-span-2 border-t pt-3 flex items-center justify-between">
+                    <div>
+                      <div className="text-xs font-semibold text-gray-700">
+                        Vendor Pricing
+                      </div>
+                      <div className="text-[11px] text-gray-500">
+                        Manage vendor relationships and pricing for this
+                        product.
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const prod = editingProduct;
+                        handleCloseModal();
+                        handleOpenVendorModal(prod);
+                      }}
+                      className="text-xs text-indigo-600 hover:text-indigo-800 font-medium whitespace-nowrap"
+                    >
+                      Manage Vendors →
+                    </button>
+                  </div>
                 )}
               </div>
               <div className="flex justify-end gap-2 mt-4 pt-3 border-t">
