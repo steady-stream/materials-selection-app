@@ -1,7 +1,13 @@
 import React, { useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { projectService } from "../services";
-import type { ReviewData, ReviewLineItem, LineItemOption, Product, Manufacturer } from "../types";
+import type {
+    LineItemOption,
+    Manufacturer,
+    Product,
+    ReviewData,
+    ReviewLineItem,
+} from "../types";
 
 // ---- Utilities ---------------------------------------------------------------
 
@@ -21,7 +27,8 @@ function groupByCategory(
     const catId = li.categoryId;
     if (!groups[catId]) {
       groups[catId] = {
-        category: catMap[catId] ?? ({ id: catId, name: "Uncategorized" } as any),
+        category:
+          catMap[catId] ?? ({ id: catId, name: "Uncategorized" } as any),
         items: [],
       };
     }
@@ -33,25 +40,37 @@ function groupByCategory(
 
 function fmt(value?: number | null): string {
   if (value == null) return "—";
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(value);
 }
 
 // Color-coded status badge matching PPT conventions
-function StatusBadge({ status, tier }: { status?: string | null; tier?: string | null }) {
+function StatusBadge({
+  status,
+  tier,
+}: {
+  status?: string | null;
+  tier?: string | null;
+}) {
   const s = (status ?? "selected").toLowerCase();
   let colorClass = "bg-[#1F4788]";
-  if (s === "installed")           colorClass = "bg-[#2D9F48]";
-  else if (s === "ordered")        colorClass = "bg-[#2B579A]";
-  else if (s === "received")       colorClass = "bg-[#7E3BA6]";
-  else if (s === "part recvd")     colorClass = "bg-[#7E3BA6]";
-  else if (s === "final")          colorClass = "bg-[#0D9488]";
-  else if (s === "no selection")   colorClass = "bg-[#DC2626]";
+  if (s === "installed") colorClass = "bg-[#2D9F48]";
+  else if (s === "ordered") colorClass = "bg-[#2B579A]";
+  else if (s === "received") colorClass = "bg-[#7E3BA6]";
+  else if (s === "part recvd") colorClass = "bg-[#7E3BA6]";
+  else if (s === "final") colorClass = "bg-[#0D9488]";
+  else if (s === "no selection") colorClass = "bg-[#DC2626]";
   else if (s.startsWith("option")) colorClass = "bg-[#D97706]";
 
   const tierLabel = tier ? ` · ${tier.toUpperCase()}` : "";
   return (
-    <span className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-bold text-white whitespace-nowrap ${colorClass}`}>
-      {status ?? "Selected"}{tierLabel}
+    <span
+      className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-bold text-white whitespace-nowrap ${colorClass}`}
+    >
+      {status ?? "Selected"}
+      {tierLabel}
     </span>
   );
 }
@@ -85,7 +104,9 @@ function PinEntry({ onSubmit, error, loading }: PinEntryProps) {
             style={{ filter: "brightness(0) invert(1)" }}
           />
           <p className="text-blue-300 text-xs mt-3 leading-relaxed">
-            Materials Selection<br />Review Portal
+            Materials Selection
+            <br />
+            Review Portal
           </p>
         </div>
         <p className="text-blue-400 text-xs">© MegaPros</p>
@@ -96,12 +117,19 @@ function PinEntry({ onSubmit, error, loading }: PinEntryProps) {
         <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-8">
           {/* Mobile logo */}
           <div className="md:hidden text-center mb-6">
-            <img src="/MegaProsLogo.png" alt="MegaPros" className="h-7 w-auto mx-auto" />
+            <img
+              src="/MegaProsLogo.png"
+              alt="MegaPros"
+              className="h-7 w-auto mx-auto"
+            />
           </div>
 
-          <h2 className="text-base font-bold text-gray-900 mb-1">Project Review</h2>
+          <h2 className="text-base font-bold text-gray-900 mb-1">
+            Project Review
+          </h2>
           <p className="text-xs text-gray-500 mb-6">
-            Enter the 4-digit PIN provided by your MegaPros representative to access this project review.
+            Enter the 4-digit PIN provided by your MegaPros representative to
+            access this project review.
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -149,7 +177,9 @@ function PinEntry({ onSubmit, error, loading }: PinEntryProps) {
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex gap-3 min-w-0">
-      <span className="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">{label}</span>
+      <span className="text-xs text-gray-400 w-28 flex-shrink-0 pt-0.5">
+        {label}
+      </span>
       <span className="text-xs text-gray-700 leading-relaxed">{value}</span>
     </div>
   );
@@ -161,7 +191,11 @@ interface OptionEntry {
   manufacturer: Manufacturer | null;
 }
 
-function AlternateOptions({ options, parentQty, unit }: {
+function AlternateOptions({
+  options,
+  parentQty,
+  unit,
+}: {
   options: OptionEntry[];
   parentQty: number;
   unit: string;
@@ -175,13 +209,21 @@ function AlternateOptions({ options, parentQty, unit }: {
         className="w-full flex items-center justify-between px-5 py-2.5 text-xs hover:bg-gray-50 transition-colors"
       >
         <span className="font-semibold text-amber-700">
-          {options.length} Alternative Option{options.length !== 1 ? "s" : ""} Considered
+          {options.length} Alternative Option{options.length !== 1 ? "s" : ""}{" "}
+          Considered
         </span>
         <svg
           className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
-          fill="none" viewBox="0 0 24 24" stroke="currentColor"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
         >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M19 9l-7 7-7-7"
+          />
         </svg>
       </button>
 
@@ -193,21 +235,32 @@ function AlternateOptions({ options, parentQty, unit }: {
               className="flex items-start justify-between gap-4 bg-amber-50 border border-amber-100 rounded-lg px-4 py-3"
             >
               <div className="min-w-0">
-                <p className="text-xs font-semibold text-gray-800">{product.name}</p>
+                <p className="text-xs font-semibold text-gray-800">
+                  {product.name}
+                </p>
                 {product.modelNumber && (
-                  <p className="text-xs text-gray-400 mt-0.5">Model: {product.modelNumber}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Model: {product.modelNumber}
+                  </p>
                 )}
                 {manufacturer?.name && (
-                  <p className="text-xs text-gray-500 mt-0.5">{manufacturer.name}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {manufacturer.name}
+                  </p>
                 )}
               </div>
               <div className="text-right flex-shrink-0">
                 <p className="text-xs font-bold text-gray-700">
                   {fmt(option.unitCost)}
-                  <span className="text-gray-400 font-normal"> / {unit || "unit"}</span>
+                  <span className="text-gray-400 font-normal">
+                    {" "}
+                    / {unit || "unit"}
+                  </span>
                 </p>
                 {parentQty != null && option.unitCost != null && (
-                  <p className="text-xs text-gray-400 mt-0.5">{fmt(parentQty * option.unitCost)} total</p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {fmt(parentQty * option.unitCost)} total
+                  </p>
                 )}
               </div>
             </div>
@@ -219,16 +272,22 @@ function AlternateOptions({ options, parentQty, unit }: {
 }
 
 function ProductCard({ li }: { li: ReviewLineItem }) {
+  const [imgModal, setImgModal] = useState(false);
   const productUrl = li.product?.productUrl;
   const safeUrl = productUrl
-    ? productUrl.startsWith("http") ? productUrl : `https://${productUrl}`
+    ? productUrl.startsWith("http")
+      ? productUrl
+      : `https://${productUrl}`
     : null;
 
   return (
+    <>
     <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
       {/* Card header */}
       <div className="px-6 pt-5 pb-4 border-b border-gray-100 flex items-start justify-between gap-4">
-        <h3 className="text-sm font-bold text-[#1F4788] leading-snug">{li.name}</h3>
+        <h3 className="text-sm font-bold text-[#1F4788] leading-snug">
+          {li.name}
+        </h3>
         <div className="flex-shrink-0">
           <StatusBadge status={li.status} tier={li.product?.tier} />
         </div>
@@ -242,7 +301,10 @@ function ProductCard({ li }: { li: ReviewLineItem }) {
             <DetailRow label="Product" value={li.product.name} />
           )}
           {(li.product?.description || li.material) && (
-            <DetailRow label="Description" value={(li.product?.description || li.material) ?? ""} />
+            <DetailRow
+              label="Description"
+              value={(li.product?.description || li.material) ?? ""}
+            />
           )}
           {li.product?.modelNumber && (
             <DetailRow label="Model #" value={li.product.modelNumber} />
@@ -253,22 +315,33 @@ function ProductCard({ li }: { li: ReviewLineItem }) {
           {li.vendor?.name && (
             <DetailRow label="Vendor" value={li.vendor.name} />
           )}
+          {li.product?.color && (
+            <DetailRow label="Color" value={li.product.color} />
+          )}
+          {li.product?.collection && (
+            <DetailRow label="Collection" value={li.product.collection} />
+          )}
 
           {/* Pricing row */}
           <div className="flex flex-wrap gap-x-6 gap-y-1 pt-2 mt-1 border-t border-gray-100">
             <div className="flex items-baseline gap-1.5">
               <span className="text-xs text-gray-400">Qty</span>
               <span className="text-xs font-semibold text-gray-700">
-                {li.quantity ?? "—"}{li.unit ? ` ${li.unit}` : ""}
+                {li.quantity ?? "—"}
+                {li.unit ? ` ${li.unit}` : ""}
               </span>
             </div>
             <div className="flex items-baseline gap-1.5">
               <span className="text-xs text-gray-400">Unit Cost</span>
-              <span className="text-xs font-semibold text-gray-700">{fmt(li.unitCost)}</span>
+              <span className="text-xs font-semibold text-gray-700">
+                {fmt(li.unitCost)}
+              </span>
             </div>
             <div className="flex items-baseline gap-1.5">
               <span className="text-xs text-gray-400">Total</span>
-              <span className="text-sm font-bold text-[#1F4788]">{fmt(li.totalCost)}</span>
+              <span className="text-sm font-bold text-[#1F4788]">
+                {fmt(li.totalCost)}
+              </span>
             </div>
           </div>
 
@@ -284,15 +357,20 @@ function ProductCard({ li }: { li: ReviewLineItem }) {
           )}
         </div>
 
-        {/* Right: product image */}
+        {/* Right: product image — click to expand */}
         {li.product?.imageUrl && (
-          <div className="flex-shrink-0 w-32 h-32 rounded-xl overflow-hidden border border-gray-100 bg-gray-50">
+          <button
+            type="button"
+            onClick={() => setImgModal(true)}
+            className="flex-shrink-0 w-32 h-32 rounded-xl overflow-hidden border border-gray-100 bg-gray-50 cursor-pointer hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-[#1F4788]"
+            aria-label="View full image"
+          >
             <img
               src={li.product.imageUrl}
               alt={li.product.name}
               className="w-full h-full object-contain p-1"
             />
-          </div>
+          </button>
         )}
       </div>
 
@@ -302,8 +380,12 @@ function ProductCard({ li }: { li: ReviewLineItem }) {
           className="flex items-center justify-between px-6 py-2.5"
           style={{ background: "#1F4788" }}
         >
-          <span className="text-xs font-bold text-white uppercase tracking-widest">Allowance</span>
-          <span className="text-sm font-bold text-white">{fmt(li.allowance)}</span>
+          <span className="text-xs font-bold text-white uppercase tracking-widest">
+            Allowance
+          </span>
+          <span className="text-sm font-bold text-white">
+            {fmt(li.allowance)}
+          </span>
         </div>
       )}
 
@@ -316,6 +398,34 @@ function ProductCard({ li }: { li: ReviewLineItem }) {
         />
       )}
     </div>
+
+    {/* Expanded image modal */}
+    {imgModal && li.product?.imageUrl && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+        onClick={() => setImgModal(false)}
+      >
+        <div
+          className="relative max-w-3xl max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            onClick={() => setImgModal(false)}
+            className="absolute top-3 right-3 z-10 bg-white/90 hover:bg-white rounded-full w-8 h-8 flex items-center justify-center text-gray-600 shadow"
+            aria-label="Close image"
+          >
+            ✕
+          </button>
+          <img
+            src={li.product.imageUrl}
+            alt={li.product.name}
+            className="max-w-full max-h-[85vh] object-contain p-4"
+          />
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 
@@ -331,13 +441,19 @@ function SectionPane({ category, items }: CategoryGroup) {
         className="rounded-2xl px-8 py-10 mb-6 text-center"
         style={{ background: "#1F4788" }}
       >
-        <h2 className="text-2xl font-bold text-white tracking-tight">{category.name}</h2>
+        <h2 className="text-2xl font-bold text-white tracking-tight">
+          {category.name}
+        </h2>
         {category.description && (
-          <p className="text-blue-200 text-sm mt-2 max-w-xl mx-auto">{category.description}</p>
+          <p className="text-blue-200 text-sm mt-2 max-w-xl mx-auto">
+            {category.description}
+          </p>
         )}
         <p className="text-blue-300 text-xs mt-3">
           Section Total:{" "}
-          <span className="text-white font-bold text-sm">{fmt(totalBudget)}</span>
+          <span className="text-white font-bold text-sm">
+            {fmt(totalBudget)}
+          </span>
         </p>
       </div>
 
@@ -359,7 +475,9 @@ function ReviewContent({ data }: { data: ReviewData }) {
   const [activeTab, setActiveTab] = useState(0);
 
   const expiresFormatted = data.expiresAt
-    ? new Intl.DateTimeFormat("en-US", { dateStyle: "long" }).format(new Date(data.expiresAt))
+    ? new Intl.DateTimeFormat("en-US", { dateStyle: "long" }).format(
+        new Date(data.expiresAt),
+      )
     : null;
 
   const active = groups[activeTab];
@@ -392,13 +510,17 @@ function ReviewContent({ data }: { data: ReviewData }) {
             </h1>
             <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1">
               {project.customerName && (
-                <span className="text-blue-200 text-xs">{project.customerName}</span>
+                <span className="text-blue-200 text-xs">
+                  {project.customerName}
+                </span>
               )}
               {project.address && (
                 <span className="text-blue-300 text-xs">{project.address}</span>
               )}
               {project.projectNumber && (
-                <span className="text-blue-300 text-xs">#{project.projectNumber}</span>
+                <span className="text-blue-300 text-xs">
+                  #{project.projectNumber}
+                </span>
               )}
             </div>
           </div>
@@ -407,7 +529,9 @@ function ReviewContent({ data }: { data: ReviewData }) {
           {expiresFormatted && (
             <div className="flex-shrink-0 text-right hidden md:block">
               <p className="text-blue-400 text-xs">Valid until</p>
-              <p className="text-blue-200 text-xs font-semibold">{expiresFormatted}</p>
+              <p className="text-blue-200 text-xs font-semibold">
+                {expiresFormatted}
+              </p>
             </div>
           )}
         </div>
@@ -417,7 +541,10 @@ function ReviewContent({ data }: { data: ReviewData }) {
       {groups.length > 0 && (
         <div className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
           <div className="max-w-5xl mx-auto px-6">
-            <nav className="flex overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+            <nav
+              className="flex overflow-x-auto"
+              style={{ scrollbarWidth: "none" }}
+            >
               {groups.map(({ category }, idx) => (
                 <button
                   key={category.id}
@@ -440,14 +567,17 @@ function ReviewContent({ data }: { data: ReviewData }) {
       <div className="max-w-5xl mx-auto px-6 py-6">
         {groups.length === 0 ? (
           <div className="text-center py-20">
-            <p className="text-sm text-gray-400">No materials selections have been added yet.</p>
+            <p className="text-sm text-gray-400">
+              No materials selections have been added yet.
+            </p>
           </div>
         ) : active ? (
           <SectionPane key={active.category.id} {...active} />
         ) : null}
 
         <p className="text-center text-xs text-gray-300 mt-10 pb-6">
-          Read-only view prepared by MegaPros · Contact your representative with any questions
+          Read-only view prepared by MegaPros · Contact your representative with
+          any questions
         </p>
       </div>
     </div>
@@ -484,15 +614,21 @@ export default function ReviewPage() {
         );
       } else if (status === 429) {
         const until = body?.lockedUntil
-          ? new Intl.DateTimeFormat("en-US", { timeStyle: "short" }).format(new Date(body.lockedUntil))
+          ? new Intl.DateTimeFormat("en-US", { timeStyle: "short" }).format(
+              new Date(body.lockedUntil),
+            )
           : "a while";
-        setError(`Too many incorrect attempts. Please try again after ${until}.`);
+        setError(
+          `Too many incorrect attempts. Please try again after ${until}.`,
+        );
       } else if (status === 410) {
         setFatalError(
           "This review link has expired. Please contact your MegaPros representative for a new link.",
         );
       } else if (status === 404) {
-        setFatalError("This review link was not found. It may have been revoked.");
+        setFatalError(
+          "This review link was not found. It may have been revoked.",
+        );
       } else {
         setError("Something went wrong. Please try again.");
       }
@@ -503,9 +639,16 @@ export default function ReviewPage() {
 
   if (fatalError) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4" style={{ background: "#1F4788" }}>
+      <div
+        className="min-h-screen flex items-center justify-center p-4"
+        style={{ background: "#1F4788" }}
+      >
         <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-8 text-center">
-          <img src="/MegaProsLogo.png" alt="MegaPros" className="h-7 w-auto mx-auto mb-4" />
+          <img
+            src="/MegaProsLogo.png"
+            alt="MegaPros"
+            className="h-7 w-auto mx-auto mb-4"
+          />
           <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mt-4">
             <p className="text-xs text-amber-800">{fatalError}</p>
           </div>
@@ -516,6 +659,7 @@ export default function ReviewPage() {
 
   if (reviewData) return <ReviewContent data={reviewData} />;
 
-  return <PinEntry onSubmit={handlePinSubmit} error={error} loading={loading} />;
+  return (
+    <PinEntry onSubmit={handlePinSubmit} error={error} loading={loading} />
+  );
 }
-
