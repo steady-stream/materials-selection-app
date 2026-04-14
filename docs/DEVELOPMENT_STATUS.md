@@ -1,6 +1,6 @@
 # Materials Selection App - Development Status
 
-**Last Updated:** March 10, 2026  
+**Last Updated:** April 13, 2026  
 **Environments:** Test (mpmaterials.apiaconsulting.com) | Production (d377ynyh0ngsji.cloudfront.net)
 
 ## Current Status Summary
@@ -16,19 +16,21 @@
 - PowerPoint export from project detail
 - Line item options (Good/Better/Best alternatives)
 - All allowance fields increment by 1 (not 0.01)
-- **SharePoint manual folder link** — "Link SharePoint" button on Project Detail;
-  browse existing folders in `ProjectFolders` base dir or create a new named folder
+- **SharePoint manual folder link** — "Link SharePoint" button on Project Detail
+- **Color field** on products (catalog lambda + frontend)
+- **Client feedback items P1–P5, P7–P8, L1–L5** — all implemented and deployed
 
 ✅ **Working — Production environment (AWS account 860601623272):**
 
-- All of the above **except SharePoint manual link** (not yet deployed to prod —
-  requires API Gateway route additions before Lambda/frontend deploy)
+- All of the above — **test and prod are now in full sync**
+- Split lambda architecture deployed to prod (April 13, 2026) via `migrate-prod-lambdas.ps1`
+- Frontend deployed to prod (April 13, 2026)
 
 ⚠️ **Known Issues / Pending:**
 
-- SharePoint changes not yet deployed to production (see [SHAREPOINT_MANUAL_LINK_2026-03-09.md](./SHAREPOINT_MANUAL_LINK_2026-03-09.md))
-- Lambda refactor deployed to TEST only — production deployment pending (see [LAMBDA_REFACTOR_PLAN.md](./LAMBDA_REFACTOR_PLAN.md))
-- Orders and AI Lambda routes not yet smoke-tested (write operations)
+- Orders/files/SharePoint API routes (`/orders`, `/receipts`, `/projects/{id}/files`, `/projects/{id}/sharepoint/*`) not yet added to prod API Gateway (routes don't exist, not just unwired)
+- P4 (Finish field) — on hold pending client finish list by brand
+- P6 (Product image upload) — deferred; requires S3 presigned URL infrastructure
 
 ### Bug Fixes (March 10, 2026)
 
@@ -83,6 +85,47 @@ Vite loads env files highest-priority first:
 **`deploy-prod.ps1` automatically renames `.env.local` → `.env.local.bak` before
 building, then restores it after — ensuring prod builds always use `.env.production`
 exclusively. No human action required.**
+
+---
+
+## Session Summary — April 13, 2026
+
+### Client Feedback — All Items Implemented & Deployed
+
+All items from the April 2026 client meeting are now live in both test and production. See [CLIENT_FEEDBACK_PLAN.md](./CLIENT_FEEDBACK_PLAN.md) for full detail.
+
+| ID | Description | Status |
+|----|-------------|--------|
+| P1 | "PC" unit added to unit dropdown | ✅ Done |
+| P2 | Category field → dropdown with standard construction categories | ✅ Done |
+| P3 | Color field added to products (frontend + catalog Lambda) | ✅ Done |
+| P4 | Finish field | ⏳ Hold — awaiting client finish list by brand |
+| P5 | Vendor shortcut in Edit Product modal | ✅ Done |
+| P6 | Product image upload | ⏳ Deferred — requires S3 presigned URL infrastructure |
+| P7 | Clone product | ✅ Done |
+| P8 | Add manufacturer on the fly | ✅ Done |
+| L1 | Qty column wider / easier to read | ✅ Done |
+| L2 | Status change directly in line item table | ✅ Done |
+| L3 | Vendor override when inserting product into project | ✅ Done |
+| L4 | Quick-add product from Insert Product panel | ✅ Done |
+| L5 | "Select as Final" shortcut in Choose Options modal | ✅ Done |
+
+### Infrastructure / DevOps
+
+- **Full prod split-lambda migration** (`migrate-prod-lambdas.ps1`):
+  - Created 4 new lambdas in prod: Core-API, Projects-API, Orders-API, AI-API
+  - Updated Catalog-API in prod (color field fix)
+  - Re-wired all 46 non-OPTIONS API Gateway integrations across 22 resources to split lambdas
+  - Prod API stage redeployed (deployment `xc47zu`)
+  - Test and production are now architecturally identical
+
+- **Frontend deployed to prod** via `.\deploy-prod.ps1`
+
+### Git Commits (April 13, 2026)
+
+| Hash | Description |
+|------|-------------|
+| `67b8005` | Client feedback: P1–P5, P7–P8, L1–L5, color field + split lambda migration |
 
 ---
 
