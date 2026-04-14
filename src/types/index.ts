@@ -399,3 +399,41 @@ export interface OpportunityDetails {
   account: SalesforceAccount;
   contact: SalesforceContact;
 }
+
+// ---------------------------------------------------------------------------
+// Project share / review
+// ---------------------------------------------------------------------------
+
+export interface ProjectShareStatus {
+  active: boolean;
+  expiresAt?: string;
+  shareUrl?: string | null;
+}
+
+export interface ProjectShareCreated {
+  shareUrl: string;
+  pin?: string; // only present on first-time creation
+  expiresAt: string;
+  alreadyActive?: boolean;
+}
+
+// Aggregated review payload returned by GET /review/{token}?pin=...
+export interface ReviewLineItem extends LineItem {
+  category: Category | null;
+  product: Product | null;
+  manufacturer: Manufacturer | null;
+  vendor: Vendor | null;
+  options: Array<{
+    option: LineItemOption;
+    product: Product;
+    manufacturer: Manufacturer | null;
+    vendor: Vendor | null;
+  }>;
+}
+
+export interface ReviewData {
+  project: Project;
+  categories: Category[];
+  lineItems: ReviewLineItem[];
+  expiresAt: string;
+}

@@ -11,6 +11,7 @@ import ProjectDetail from "./components/ProjectDetail";
 import ProjectForm from "./components/ProjectForm";
 import ProjectList from "./components/ProjectList";
 import ProtectedRoute from "./components/ProtectedRoute";
+import ReviewPage from "./components/ReviewPage";
 import VendorForm from "./components/VendorForm";
 import VendorList from "./components/VendorList";
 
@@ -20,6 +21,9 @@ function App() {
       <Routes>
         {/* Public — login page renders its own full-page layout */}
         <Route path="/login" element={<Login />} />
+
+        {/* Public — review page is standalone, no auth required, no nav */}
+        <Route path="/review/:token" element={<ReviewPage />} />
 
         {/* Protected — pathless guard renders Outlet when authenticated */}
         <Route element={<ProtectedRoute />}>

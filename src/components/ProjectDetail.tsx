@@ -25,6 +25,8 @@ import type {
     Product,
     ProductVendor,
     Project,
+    ProjectShareCreated,
+    ProjectShareStatus,
     Receipt,
     Vendor,
 } from "../types";
@@ -65,6 +67,12 @@ const ProjectDetail = () => {
   const [showProjectModal, setShowProjectModal] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [savingProject, setSavingProject] = useState(false);
+
+  // Share link state
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareStatus, setShareStatus] = useState<ProjectShareStatus | null>(null);
+  const [shareCreated, setShareCreated] = useState<ProjectShareCreated | null>(null);
+  const [shareLoading, setShareLoading] = useState(false);
   const [viewMode, setViewMode] = useState<"category" | "vendor">("category");
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(),
@@ -311,6 +319,53 @@ const ProjectDetail = () => {
       // Keep project as null to trigger "Project not found" message
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Share link handlers
+  const handleOpenShareModal = async () => {
+    if (!project) return;
+    setShareCreated(null);
+    setShareLoading(true);
+    setShowShareModal(true);
+    try {
+      const status = await projectService.getShareStatus(project.id);
+      setShareStatus(status);
+    } catch {
+      setShareStatus({ active: false });
+    } finally {
+      setShareLoading(false);
+    }
+  };
+
+  const handleCreateShare = async () => {
+    if (!project) return;
+    setShareLoading(true);
+    try {
+      const result = await projectService.createShare(project.id);
+      setShareCreated(result);
+      setShareStatus({ active: true, expiresAt: result.expiresAt, shareUrl: result.shareUrl });
+    } catch {
+      alert("Failed to create share link. Please try again.");
+    } finally {
+      setShareLoading(false);
+    }
+  };
+
+  const handleRevokeShare = async () => {
+    if (
+      !project ||
+      !window.confirm("Revoke this share link? The client will no longer be able to access the review page.")
+    ) return;
+    setShareLoading(true);
+    try {
+      await projectService.revokeShare(project.id);
+      setShareStatus({ active: false });
+      setShareCreated(null);
+    } catch {
+      alert("Failed to revoke share link.");
+    } finally {
+      setShareLoading(false);
     }
   };
 
@@ -1870,6 +1925,12 @@ const ProjectDetail = () => {
                 className="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700"
               >
                 📊 Export PowerPoint
+              </button>
+              <button
+                onClick={handleOpenShareModal}
+                className="bg-indigo-600 text-white px-2 py-1 rounded text-xs hover:bg-indigo-700"
+              >
+                🔗 Share Review
               </button>
               {project.sharepointFolderId && project.sharepointDriveId ? (
                 <button
@@ -6518,6 +6579,126 @@ const ProjectDetail = () => {
             setLineItems((prev) => [...prev, lineItem])
           }
         />
+      )}
+
+      {/* Share Review Link Modal */}
+      {showShareModal && project && (
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl border border-gray-200 w-full max-w-md">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+              <h2 className="text-sm font-semibold text-gray-800">Share Project Review Link</h2>
+              <button
+                onClick={() => { setShowShareModal(false); setShareCreated(null); }}
+                className="text-gray-400 hover:text-gray-600 text-lg leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="p-5">
+              {shareLoading ? (
+                <p className="text-xs text-gray-500 text-center py-4">Loading…</p>
+              ) : shareCreated?.pin ? (
+                /* Newly created share — show PIN once */
+                <div className="space-y-4">
+                  <div className="bg-green-50 border border-green-200 rounded p-4">
+                    <p className="text-xs font-semibold text-green-800 mb-1">Share link created!</p>
+                    <p className="text-xs text-green-700">
+                      Give the client this PIN — it will <strong>not</strong> be shown again.
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Review URL</p>
+                    <div className="flex items-center gap-2">
+                      <input
+                        readOnly
+                        value={shareCreated.shareUrl}
+                        className="flex-1 border border-gray-200 rounded px-2 py-1 text-xs bg-gray-50 text-gray-700"
+                      />
+                      <button
+                        onClick={() => navigator.clipboard.writeText(shareCreated.shareUrl)}
+                        className="text-xs text-indigo-600 hover:text-indigo-800"
+                        title="Copy URL"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Client PIN (copy now)</p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl font-mono font-bold tracking-[0.3em] text-gray-800 bg-amber-50 border border-amber-200 rounded px-4 py-2">
+                        {shareCreated.pin}
+                      </span>
+                      <button
+                        onClick={() => navigator.clipboard.writeText(shareCreated.pin!)}
+                        className="text-xs text-indigo-600 hover:text-indigo-800"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-gray-400">
+                    Expires: {new Intl.DateTimeFormat("en-US", { dateStyle: "long" }).format(new Date(shareCreated.expiresAt))}
+                  </p>
+                </div>
+              ) : shareStatus?.active ? (
+                /* Active share exists — show status + revoke option */
+                <div className="space-y-4">
+                  <div className="bg-blue-50 border border-blue-200 rounded p-4">
+                    <p className="text-xs font-semibold text-blue-800 mb-1">Active share link</p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <input
+                        readOnly
+                        value={shareStatus.shareUrl ?? ""}
+                        className="flex-1 border border-gray-200 rounded px-2 py-1 text-xs bg-gray-50 text-gray-700"
+                      />
+                      <button
+                        onClick={() => navigator.clipboard.writeText(shareStatus.shareUrl!)}
+                        className="text-xs text-indigo-600 hover:text-indigo-800"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                    {shareStatus.expiresAt && (
+                      <p className="text-xs text-blue-600 mt-2">
+                        Expires: {new Intl.DateTimeFormat("en-US", { dateStyle: "long" }).format(new Date(shareStatus.expiresAt))}
+                      </p>
+                    )}
+                    <p className="text-xs text-blue-600 mt-1">The PIN was shown when the link was first created.</p>
+                  </div>
+
+                  <button
+                    onClick={handleRevokeShare}
+                    disabled={shareLoading}
+                    className="w-full border border-red-300 text-red-600 text-xs py-2 rounded hover:bg-red-50 disabled:opacity-50"
+                  >
+                    Revoke Share Link
+                  </button>
+                </div>
+              ) : (
+                /* No active share — offer to create */
+                <div className="space-y-4">
+                  <p className="text-xs text-gray-600">
+                    Create a read-only review link for this project. The client will need a 4-digit PIN to access it.
+                    The link expires in 30 days.
+                  </p>
+                  <button
+                    onClick={handleCreateShare}
+                    disabled={shareLoading}
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs py-2 rounded disabled:opacity-50"
+                  >
+                    Create Share Link
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

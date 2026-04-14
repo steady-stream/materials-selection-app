@@ -1,6 +1,9 @@
 import type {
     CreateProjectRequest,
     Project,
+    ProjectShareCreated,
+    ProjectShareStatus,
+    ReviewData,
     UpdateProjectRequest,
 } from "../types";
 import apiClient from "./api";
@@ -146,5 +149,41 @@ export const projectService = {
       library: string;
       baseFolder: string;
     };
+  },
+
+  // -------------------------------------------------------------------------
+  // Share / review link management
+  // -------------------------------------------------------------------------
+
+  // Create (or return existing) share link for a project.
+  // Returns pin only on first-time creation — never again after that.
+  createShare: async (projectId: string): Promise<ProjectShareCreated> => {
+    const response = await apiClient.post<ProjectShareCreated>(
+      `/projects/${projectId}/share`,
+    );
+    return response.data;
+  },
+
+  // Check whether an active share link exists for a project.
+  getShareStatus: async (projectId: string): Promise<ProjectShareStatus> => {
+    const response = await apiClient.get<ProjectShareStatus>(
+      `/projects/${projectId}/share`,
+    );
+    return response.data;
+  },
+
+  // Revoke (delete) the share link for a project.
+  revokeShare: async (projectId: string): Promise<void> => {
+    await apiClient.delete(`/projects/${projectId}/share`);
+  },
+
+  // Fetch review data for a share token (public, PIN required).
+  // Called from the ReviewPage — no auth header needed.
+  getReviewData: async (token: string, pin: string): Promise<ReviewData> => {
+    const response = await apiClient.get<ReviewData>(
+      `/review/${token}`,
+      { params: { pin } },
+    );
+    return response.data;
   },
 };
