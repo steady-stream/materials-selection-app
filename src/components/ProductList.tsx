@@ -58,6 +58,12 @@ const ProductList = () => {
   const [quickAddMfrName, setQuickAddMfrName] = useState("");
   const [quickAddMfrSaving, setQuickAddMfrSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageFileInputRef = useRef<HTMLInputElement>(null);
+  const [imageInputMode, setImageInputMode] = useState<"url" | "upload">("url");
+  const [imageUploadStatus, setImageUploadStatus] = useState<
+    "idle" | "uploading" | "done" | "error"
+  >("idle");
+  const [imageUploadError, setImageUploadError] = useState<string>("");
 
   const [formData, setFormData] = useState({
     manufacturerId: "",
@@ -154,6 +160,15 @@ const ProductList = () => {
       setPrimaryVendorSku("");
       setPrimaryVendorCost("");
     }
+    // Auto-select upload mode if the existing imageUrl is from our S3 images bucket
+    const existingUrl = product?.imageUrl || "";
+    setImageInputMode(
+      existingUrl.includes("materials-product-images-") ? "upload" : "url",
+    );
+    setImageUploadStatus(
+      existingUrl.includes("materials-product-images-") ? "done" : "idle",
+    );
+    setImageUploadError("");
     setIsModalOpen(true);
   };
 
@@ -178,6 +193,9 @@ const ProductList = () => {
     setPrimaryVendorId("");
     setPrimaryVendorSku("");
     setPrimaryVendorCost("");
+    setImageInputMode("url");
+    setImageUploadStatus("idle");
+    setImageUploadError("");
   };
 
   // Clone opens the Add modal pre-populated with the source product's fields
@@ -200,6 +218,64 @@ const ProductList = () => {
     setPrimaryVendorSku("");
     setPrimaryVendorCost("");
     setIsModalOpen(true);
+  };
+
+  const handleImageFileSelect = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Client-side size guard — reject before requesting presigned URL
+    if (file.size > 5 * 1024 * 1024) {
+      setImageUploadError("Image must be 5 MB or smaller.");
+      return;
+    }
+
+    const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+    if (!allowedTypes.includes(file.type)) {
+      setImageUploadError("Allowed formats: JPEG, PNG, WebP, GIF.");
+      return;
+    }
+
+    setImageUploadStatus("uploading");
+    setImageUploadError("");
+
+    try {
+      // Step 1 — get presigned URL from Lambda
+      const params = new URLSearchParams({
+        filename: file.name,
+        contentType: file.type,
+      });
+      const apiBase =
+        import.meta.env.VITE_API_BASE_URL ||
+        "https://xrld1hq3e2.execute-api.us-east-1.amazonaws.com/prod";
+      const res = await fetch(`${apiBase}/products/upload-url?${params}`);
+      if (!res.ok) throw new Error(`Failed to get upload URL (${res.status})`);
+      const { uploadUrl, imageUrl } = await res.json();
+
+      // Step 2 — PUT file bytes directly to S3 (never goes through Lambda)
+      const uploadRes = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      if (!uploadRes.ok)
+        throw new Error(`S3 upload failed (${uploadRes.status})`);
+
+      // Step 3 — store the permanent public URL in formData
+      setFormData((prev) => ({ ...prev, imageUrl }));
+      setImageUploadStatus("done");
+    } catch (err) {
+      console.error("Image upload failed:", err);
+      setImageUploadError(
+        err instanceof Error ? err.message : "Upload failed. Please try again.",
+      );
+      setImageUploadStatus("error");
+    }
+
+    // Reset the file input so the same file can be re-selected after an error
+    if (imageFileInputRef.current) imageFileInputRef.current.value = "";
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1427,17 +1503,124 @@ const ProductList = () => {
                   />
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Image URL
-                  </label>
-                  <input
-                    type="url"
-                    value={formData.imageUrl}
-                    onChange={(e) =>
-                      setFormData({ ...formData, imageUrl: e.target.value })
-                    }
-                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
-                  />
+                  {/* ── Image section — URL or file upload, user can switch at any time ── */}
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-medium text-gray-700">
+                      Product Image
+                    </label>
+                    {/* Mode toggle */}
+                    <div className="flex rounded border border-gray-300 overflow-hidden text-[11px]">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setImageInputMode("url");
+                          setImageUploadStatus("idle");
+                          setImageUploadError("");
+                        }}
+                        className={`px-2 py-0.5 ${imageInputMode === "url" ? "bg-indigo-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+                      >
+                        URL
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setImageInputMode("upload");
+                          setImageUploadError("");
+                        }}
+                        className={`px-2 py-0.5 ${imageInputMode === "upload" ? "bg-indigo-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+                      >
+                        Upload
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Thumbnail — shown whenever an imageUrl exists regardless of mode */}
+                  {formData.imageUrl && (
+                    <div className="mb-2 flex items-center gap-2">
+                      <img
+                        src={formData.imageUrl}
+                        alt="Product"
+                        className="h-16 w-16 object-contain border border-gray-200 rounded bg-gray-50"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = "none";
+                        }}
+                      />
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[11px] text-gray-500 break-all max-w-xs truncate">
+                          {formData.imageUrl}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormData({ ...formData, imageUrl: "" });
+                            setImageUploadStatus("idle");
+                            setImageUploadError("");
+                          }}
+                          className="text-[11px] text-red-600 hover:text-red-800 text-left"
+                        >
+                          × Remove image
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* URL mode */}
+                  {imageInputMode === "url" && (
+                    <input
+                      type="url"
+                      placeholder="https://..."
+                      value={formData.imageUrl}
+                      onChange={(e) =>
+                        setFormData({ ...formData, imageUrl: e.target.value })
+                      }
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                    />
+                  )}
+
+                  {/* Upload mode */}
+                  {imageInputMode === "upload" && (
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => imageFileInputRef.current?.click()}
+                          disabled={imageUploadStatus === "uploading"}
+                          className="px-3 py-1 text-xs bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+                        >
+                          {imageUploadStatus === "uploading"
+                            ? "Uploading…"
+                            : formData.imageUrl
+                              ? "Replace image"
+                              : "Choose file"}
+                        </button>
+                        {imageUploadStatus === "uploading" && (
+                          <span className="text-[11px] text-gray-500">
+                            Uploading…
+                          </span>
+                        )}
+                        {imageUploadStatus === "done" && (
+                          <span className="text-[11px] text-green-600">
+                            ✓ Uploaded
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-gray-400">
+                        JPEG, PNG, WebP or GIF · max 5 MB
+                      </p>
+                      <input
+                        ref={imageFileInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif"
+                        className="hidden"
+                        onChange={handleImageFileSelect}
+                      />
+                      {imageUploadError && (
+                        <p className="text-[11px] text-red-600">
+                          {imageUploadError}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
                 {!editingProduct && (
                   <>

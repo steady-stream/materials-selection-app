@@ -94,21 +94,21 @@ exclusively. No human action required.**
 
 All items from the April 2026 client meeting are now live in both test and production. See [CLIENT_FEEDBACK_PLAN.md](./CLIENT_FEEDBACK_PLAN.md) for full detail.
 
-| ID | Description | Status |
-|----|-------------|--------|
-| P1 | "PC" unit added to unit dropdown | ✅ Done |
-| P2 | Category field → dropdown with standard construction categories | ✅ Done |
-| P3 | Color field added to products (frontend + catalog Lambda) | ✅ Done |
-| P4 | Finish field | ⏳ Hold — awaiting client finish list by brand |
-| P5 | Vendor shortcut in Edit Product modal | ✅ Done |
-| P6 | Product image upload | ⏳ Deferred — requires S3 presigned URL infrastructure |
-| P7 | Clone product | ✅ Done |
-| P8 | Add manufacturer on the fly | ✅ Done |
-| L1 | Qty column wider / easier to read | ✅ Done |
-| L2 | Status change directly in line item table | ✅ Done |
-| L3 | Vendor override when inserting product into project | ✅ Done |
-| L4 | Quick-add product from Insert Product panel | ✅ Done |
-| L5 | "Select as Final" shortcut in Choose Options modal | ✅ Done |
+| ID  | Description                                                     | Status                                                 |
+| --- | --------------------------------------------------------------- | ------------------------------------------------------ |
+| P1  | "PC" unit added to unit dropdown                                | ✅ Done                                                |
+| P2  | Category field → dropdown with standard construction categories | ✅ Done                                                |
+| P3  | Color field added to products (frontend + catalog Lambda)       | ✅ Done                                                |
+| P4  | Finish field                                                    | ⏳ Hold — awaiting client finish list by brand         |
+| P5  | Vendor shortcut in Edit Product modal                           | ✅ Done                                                |
+| P6  | Product image upload                                            | ⏳ Deferred — requires S3 presigned URL infrastructure |
+| P7  | Clone product                                                   | ✅ Done                                                |
+| P8  | Add manufacturer on the fly                                     | ✅ Done                                                |
+| L1  | Qty column wider / easier to read                               | ✅ Done                                                |
+| L2  | Status change directly in line item table                       | ✅ Done                                                |
+| L3  | Vendor override when inserting product into project             | ✅ Done                                                |
+| L4  | Quick-add product from Insert Product panel                     | ✅ Done                                                |
+| L5  | "Select as Final" shortcut in Choose Options modal              | ✅ Done                                                |
 
 ### Infrastructure / DevOps
 
@@ -123,8 +123,8 @@ All items from the April 2026 client meeting are now live in both test and produ
 
 ### Git Commits (April 13, 2026)
 
-| Hash | Description |
-|------|-------------|
+| Hash      | Description                                                                |
+| --------- | -------------------------------------------------------------------------- |
 | `67b8005` | Client feedback: P1–P5, P7–P8, L1–L5, color field + split lambda migration |
 
 ---

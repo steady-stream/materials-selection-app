@@ -7,7 +7,21 @@ const {
   ScanCommand,
   QueryCommand,
 } = require("@aws-sdk/lib-dynamodb");
+const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { randomUUID } = require("crypto");
+
+const s3 = new S3Client({ region: "us-east-1" });
+// Bucket name encodes the account ID so test and prod never share images
+const IMAGES_BUCKET =
+  process.env.PRODUCT_IMAGES_BUCKET || "materials-product-images-634752426026";
+const ALLOWED_IMAGE_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+];
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB — enforced via presigned URL conditions
 
 const client = new DynamoDBClient({ region: "us-east-1" });
 const ddb = DynamoDBDocumentClient.from(client);
@@ -73,6 +87,10 @@ exports.handler = async (event) => {
     }
 
     // Products routes
+    // Upload-url must be matched before the generic /products/{id} GET pattern
+    if (path === "/products/upload-url" && method === "GET") {
+      return await getProductImageUploadUrl(event.queryStringParameters || {});
+    }
     if (path === "/products" && method === "GET") {
       return await getAllProducts();
     }
@@ -258,6 +276,45 @@ async function getProduct(id) {
     };
   }
   return { statusCode: 200, headers, body: JSON.stringify(result.Item) };
+}
+
+async function getProductImageUploadUrl({ filename, contentType }) {
+  // Validate content type to block non-image uploads
+  if (!contentType || !ALLOWED_IMAGE_TYPES.includes(contentType)) {
+    return {
+      statusCode: 400,
+      headers,
+      body: JSON.stringify({
+        error: "contentType must be one of: " + ALLOWED_IMAGE_TYPES.join(", "),
+      }),
+    };
+  }
+
+  // Derive file extension from contentType (safer than trusting the filename extension)
+  const extMap = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/gif": "gif",
+  };
+  const ext = extMap[contentType];
+  const key = `product-images/${randomUUID()}.${ext}`;
+
+  const command = new PutObjectCommand({
+    Bucket: IMAGES_BUCKET,
+    Key: key,
+    ContentType: contentType,
+    ContentLengthRange: [1, MAX_IMAGE_BYTES], // rejects uploads > 5 MB at S3 level
+  });
+
+  const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 900 }); // 15 min TTL
+  const imageUrl = `https://${IMAGES_BUCKET}.s3.amazonaws.com/${key}`;
+
+  return {
+    statusCode: 200,
+    headers,
+    body: JSON.stringify({ uploadUrl, imageUrl }),
+  };
 }
 
 async function createProduct(data) {
