@@ -6,12 +6,23 @@ This guide walks through setting up Azure AD authentication for automated ShareP
 
 ---
 
+> ### ⏳ STATUS: WAITING FOR CLIENT CREDENTIALS — April 14, 2026
+>
+> Instructions have been sent to the client's Microsoft 365 admin.
+> **Target SharePoint**: `https://netorgft2978387.sharepoint.com/sites/megapros`
+> **Document Library**: `Shared Documents`
+>
+> When the admin sends back the three credential values, jump to
+> **[When You Receive Credentials →](#when-you-receive-credentials-developer-checklist)**
+
+---
+
 ## Prerequisites
 
-✅ Microsoft 365 admin access  
+✅ Microsoft 365 admin access on the **client's** tenant (`netorgft2978387`)  
 ✅ Access to Azure Portal  
-✅ SharePoint site: `https://apiaconsulting.sharepoint.com/sites/MegaPros360`  
-✅ Document library: `Projects`
+✅ SharePoint site: `https://netorgft2978387.sharepoint.com/sites/megapros`  
+✅ Document library: `Shared Documents`
 
 ---
 
@@ -112,9 +123,9 @@ Microsoft Graph
 **Your SharePoint Configuration:**
 
 ```
-Site URL:     https://apiaconsulting.sharepoint.com/sites/MegaPros360
-Library Name: Projects
-Base Folder:  ProjectFolders (will be created automatically)
+Site URL:     https://netorgft2978387.sharepoint.com/sites/megapros
+Library Name: Shared Documents
+Base Folder:  Materials Selection (will be created automatically)
 ```
 
 ---
@@ -126,12 +137,12 @@ Base Folder:  ProjectFolders (will be created automatically)
 Copy your values into this template:
 
 ```bash
-AZURE_TENANT_ID=<your-tenant-id-from-step-1.3>
-AZURE_CLIENT_ID=<your-client-id-from-step-1.3>
-AZURE_CLIENT_SECRET=<your-client-secret-from-step-2.2>
-SHAREPOINT_SITE_URL=https://apiaconsulting.sharepoint.com/sites/MegaPros360
-SHAREPOINT_LIBRARY=Projects
-SHAREPOINT_BASE_FOLDER=ProjectFolders
+AZURE_TENANT_ID=<directory-tenant-id-from-client-admin>
+AZURE_CLIENT_ID=<application-client-id-from-client-admin>
+AZURE_CLIENT_SECRET=<client-secret-value-from-client-admin>
+SHAREPOINT_SITE_URL=https://netorgft2978387.sharepoint.com/sites/megapros
+SHAREPOINT_LIBRARY=Shared Documents
+SHAREPOINT_BASE_FOLDER=Materials Selection
 ```
 
 ### 5.2 Set in AWS Lambda
@@ -149,14 +160,14 @@ SHAREPOINT_BASE_FOLDER=ProjectFolders
 
 ```bash
 aws lambda update-function-configuration \
-  --function-name MaterialsSelectionAPI \
+  --function-name MaterialsSelection-Projects-API \
   --environment Variables="{
-    AZURE_TENANT_ID=your-tenant-id,
-    AZURE_CLIENT_ID=your-client-id,
-    AZURE_CLIENT_SECRET=your-client-secret,
-    SHAREPOINT_SITE_URL=https://apiaconsulting.sharepoint.com/sites/MegaPros360,
-    SHAREPOINT_LIBRARY=Projects,
-    SHAREPOINT_BASE_FOLDER=ProjectFolders
+    AZURE_TENANT_ID=<value-from-client>,
+    AZURE_CLIENT_ID=<value-from-client>,
+    AZURE_CLIENT_SECRET=<value-from-client>,
+    SHAREPOINT_SITE_URL=https://netorgft2978387.sharepoint.com/sites/megapros,
+    SHAREPOINT_LIBRARY=Shared Documents,
+    SHAREPOINT_BASE_FOLDER=Materials Selection
   }" \
   --region us-east-1
 ```
@@ -404,6 +415,92 @@ async function getSecret(secretName) {
   return JSON.parse(data.SecretString);
 }
 ```
+
+---
+
+---
+
+## When You Receive Credentials — Developer Checklist
+
+When the client's Microsoft 365 admin sends back the three credential values, follow these steps **in order**.
+
+### Step A — Confirm you received all three values
+
+```
+☐  Directory (Tenant) ID
+☐  Application (Client) ID
+☐  Client Secret Value
+☐  Admin confirmed: consent granted + PnP PowerShell step done
+```
+
+### Step B — Update `aws/secrets.ps1`
+
+Open `aws/secrets.ps1` (not committed — see `.gitignore`) and fill in the three values:
+
+```powershell
+$AZURE_CLIENT_ID        = "<Application Client ID from admin>"
+$AZURE_CLIENT_SECRET    = "<Client Secret Value from admin>"
+$AZURE_TENANT_ID        = "<Directory Tenant ID from admin>"
+$SHAREPOINT_SITE_URL    = "https://netorgft2978387.sharepoint.com/sites/megapros"
+$SHAREPOINT_LIBRARY     = "Shared Documents"
+$SHAREPOINT_BASE_FOLDER = "Materials Selection"
+```
+
+> `aws/secrets.ps1` is gitignored. Never commit real credentials.
+
+### Step C — Deploy the updated env vars to `MaterialsSelection-Projects-API` (prod)
+
+This updates **only** the Projects-API Lambda environment — no code change needed.
+
+```powershell
+# Load secrets file
+. .\aws\secrets.ps1
+
+# Push env vars to prod Projects lambda
+aws lambda update-function-configuration `
+  --function-name MaterialsSelection-Projects-API `
+  --environment "Variables={AZURE_TENANT_ID=$AZURE_TENANT_ID,AZURE_CLIENT_ID=$AZURE_CLIENT_ID,AZURE_CLIENT_SECRET=$AZURE_CLIENT_SECRET,SHAREPOINT_SITE_URL=$SHAREPOINT_SITE_URL,SHAREPOINT_LIBRARY=$SHAREPOINT_LIBRARY,SHAREPOINT_BASE_FOLDER=$SHAREPOINT_BASE_FOLDER}" `
+  --profile megapros-prod `
+  --region us-east-1
+```
+
+### Step D — Verify the env vars were saved
+
+```powershell
+aws lambda get-function-configuration `
+  --function-name MaterialsSelection-Projects-API `
+  --profile megapros-prod `
+  --region us-east-1 `
+  --query "Environment.Variables"
+```
+
+Expect all 6 keys to be present. Confirm `SHAREPOINT_SITE_URL` = `https://netorgft2978387.sharepoint.com/sites/megapros`.
+
+### Step E — Smoke test
+
+1. Open the prod app: `https://d377ynyh0ngsji.cloudfront.net`
+2. Open any existing project's detail page.
+3. Click **"Link to SharePoint"** (or create/navigate to the SharePoint folder button).
+4. The app should either navigate to the folder in SharePoint or prompt to create one.
+5. Check CloudWatch logs for the Projects lambda:
+
+```powershell
+aws logs tail /aws/lambda/MaterialsSelection-Projects-API `
+  --follow `
+  --profile megapros-prod `
+  --region us-east-1
+```
+
+Look for: `SharePoint folder created` or `SharePoint auth token acquired`.
+
+### Step F — If it fails
+
+| Error                           | Likely cause                                       | Fix                                                                     |
+| ------------------------------- | -------------------------------------------------- | ----------------------------------------------------------------------- |
+| `401 Unauthorized`              | Wrong tenant/client ID or secret                   | Re-check the three values in `secrets.ps1`                              |
+| `403 Forbidden`                 | Admin consent not granted or PnP step not done     | Ask admin to re-run Step 4 and Step 5 of the setup guide                |
+| `404 Site not found`            | Wrong `SHAREPOINT_SITE_URL`                        | Confirm URL with admin — just the site, no `/Shared Documents` suffix   |
+| `403` after consent looks right | `Sites.Selected` scope — PnP grant may have failed | Ask admin to re-run the PnP `Grant-PnPAzureADAppSitePermission` command |
 
 ---
 

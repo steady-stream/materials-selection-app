@@ -30,10 +30,10 @@ $config = @{
     prod = @{ Profile = "megapros-prod"; Account = "860601623272" }
 }
 
-$PROFILE  = $config[$Env].Profile
-$ACCOUNT  = $config[$Env].Account
-$REGION   = "us-east-1"
-$TABLE    = "ProjectShares-$Env"
+$PROFILE = $config[$Env].Profile
+$ACCOUNT = $config[$Env].Account
+$REGION = "us-east-1"
+$TABLE = "ProjectShares-$Env"
 
 Write-Host ""
 Write-Host "======================================" -ForegroundColor Cyan
@@ -67,12 +67,12 @@ $gsi = '[{"IndexName":"ProjectIdIndex","KeySchema":[{"AttributeName":"projectId"
 aws dynamodb create-table `
     --table-name $TABLE `
     --attribute-definitions `
-        AttributeName=shareToken,AttributeType=S `
-        AttributeName=projectId,AttributeType=S `
+    AttributeName=shareToken, AttributeType=S `
+    AttributeName=projectId, AttributeType=S `
     --key-schema `
-        AttributeName=shareToken,KeyType=HASH `
+    AttributeName=shareToken, KeyType=HASH `
     --global-secondary-indexes $gsi `
-    --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5 `
+    --provisioned-throughput ReadCapacityUnits=5, WriteCapacityUnits=5 `
     --profile $PROFILE `
     --region $REGION | Out-Null
 

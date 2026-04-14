@@ -180,10 +180,9 @@ export const projectService = {
   // Fetch review data for a share token (public, PIN required).
   // Called from the ReviewPage — no auth header needed.
   getReviewData: async (token: string, pin: string): Promise<ReviewData> => {
-    const response = await apiClient.get<ReviewData>(
-      `/review/${token}`,
-      { params: { pin } },
-    );
+    const response = await apiClient.get<ReviewData>(`/review/${token}`, {
+      params: { pin },
+    });
     return response.data;
   },
 };

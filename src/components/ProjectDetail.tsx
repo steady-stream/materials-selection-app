@@ -70,8 +70,12 @@ const ProjectDetail = () => {
 
   // Share link state
   const [showShareModal, setShowShareModal] = useState(false);
-  const [shareStatus, setShareStatus] = useState<ProjectShareStatus | null>(null);
-  const [shareCreated, setShareCreated] = useState<ProjectShareCreated | null>(null);
+  const [shareStatus, setShareStatus] = useState<ProjectShareStatus | null>(
+    null,
+  );
+  const [shareCreated, setShareCreated] = useState<ProjectShareCreated | null>(
+    null,
+  );
   const [shareLoading, setShareLoading] = useState(false);
   const [viewMode, setViewMode] = useState<"category" | "vendor">("category");
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
@@ -344,7 +348,11 @@ const ProjectDetail = () => {
     try {
       const result = await projectService.createShare(project.id);
       setShareCreated(result);
-      setShareStatus({ active: true, expiresAt: result.expiresAt, shareUrl: result.shareUrl });
+      setShareStatus({
+        active: true,
+        expiresAt: result.expiresAt,
+        shareUrl: result.shareUrl,
+      });
     } catch {
       alert("Failed to create share link. Please try again.");
     } finally {
@@ -355,8 +363,11 @@ const ProjectDetail = () => {
   const handleRevokeShare = async () => {
     if (
       !project ||
-      !window.confirm("Revoke this share link? The client will no longer be able to access the review page.")
-    ) return;
+      !window.confirm(
+        "Revoke this share link? The client will no longer be able to access the review page.",
+      )
+    )
+      return;
     setShareLoading(true);
     try {
       await projectService.revokeShare(project.id);
@@ -6587,9 +6598,14 @@ const ProjectDetail = () => {
           <div className="bg-white rounded-lg shadow-xl border border-gray-200 w-full max-w-md">
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
-              <h2 className="text-sm font-semibold text-gray-800">Share Project Review Link</h2>
+              <h2 className="text-sm font-semibold text-gray-800">
+                Share Project Review Link
+              </h2>
               <button
-                onClick={() => { setShowShareModal(false); setShareCreated(null); }}
+                onClick={() => {
+                  setShowShareModal(false);
+                  setShareCreated(null);
+                }}
                 className="text-gray-400 hover:text-gray-600 text-lg leading-none"
               >
                 ×
@@ -6598,14 +6614,19 @@ const ProjectDetail = () => {
 
             <div className="p-5">
               {shareLoading ? (
-                <p className="text-xs text-gray-500 text-center py-4">Loading…</p>
+                <p className="text-xs text-gray-500 text-center py-4">
+                  Loading…
+                </p>
               ) : shareCreated?.pin ? (
                 /* Newly created share — show PIN once */
                 <div className="space-y-4">
                   <div className="bg-green-50 border border-green-200 rounded p-4">
-                    <p className="text-xs font-semibold text-green-800 mb-1">Share link created!</p>
+                    <p className="text-xs font-semibold text-green-800 mb-1">
+                      Share link created!
+                    </p>
                     <p className="text-xs text-green-700">
-                      Give the client this PIN — it will <strong>not</strong> be shown again.
+                      Give the client this PIN — it will <strong>not</strong> be
+                      shown again.
                     </p>
                   </div>
 
@@ -6618,7 +6639,9 @@ const ProjectDetail = () => {
                         className="flex-1 border border-gray-200 rounded px-2 py-1 text-xs bg-gray-50 text-gray-700"
                       />
                       <button
-                        onClick={() => navigator.clipboard.writeText(shareCreated.shareUrl)}
+                        onClick={() =>
+                          navigator.clipboard.writeText(shareCreated.shareUrl)
+                        }
                         className="text-xs text-indigo-600 hover:text-indigo-800"
                         title="Copy URL"
                       >
@@ -6628,13 +6651,17 @@ const ProjectDetail = () => {
                   </div>
 
                   <div>
-                    <p className="text-xs text-gray-500 mb-1">Client PIN (copy now)</p>
+                    <p className="text-xs text-gray-500 mb-1">
+                      Client PIN (copy now)
+                    </p>
                     <div className="flex items-center gap-2">
                       <span className="text-2xl font-mono font-bold tracking-[0.3em] text-gray-800 bg-amber-50 border border-amber-200 rounded px-4 py-2">
                         {shareCreated.pin}
                       </span>
                       <button
-                        onClick={() => navigator.clipboard.writeText(shareCreated.pin!)}
+                        onClick={() =>
+                          navigator.clipboard.writeText(shareCreated.pin!)
+                        }
                         className="text-xs text-indigo-600 hover:text-indigo-800"
                       >
                         Copy
@@ -6643,14 +6670,19 @@ const ProjectDetail = () => {
                   </div>
 
                   <p className="text-xs text-gray-400">
-                    Expires: {new Intl.DateTimeFormat("en-US", { dateStyle: "long" }).format(new Date(shareCreated.expiresAt))}
+                    Expires:{" "}
+                    {new Intl.DateTimeFormat("en-US", {
+                      dateStyle: "long",
+                    }).format(new Date(shareCreated.expiresAt))}
                   </p>
                 </div>
               ) : shareStatus?.active ? (
                 /* Active share exists — show status + revoke option */
                 <div className="space-y-4">
                   <div className="bg-blue-50 border border-blue-200 rounded p-4">
-                    <p className="text-xs font-semibold text-blue-800 mb-1">Active share link</p>
+                    <p className="text-xs font-semibold text-blue-800 mb-1">
+                      Active share link
+                    </p>
                     <div className="flex items-center gap-2 mt-2">
                       <input
                         readOnly
@@ -6658,7 +6690,9 @@ const ProjectDetail = () => {
                         className="flex-1 border border-gray-200 rounded px-2 py-1 text-xs bg-gray-50 text-gray-700"
                       />
                       <button
-                        onClick={() => navigator.clipboard.writeText(shareStatus.shareUrl!)}
+                        onClick={() =>
+                          navigator.clipboard.writeText(shareStatus.shareUrl!)
+                        }
                         className="text-xs text-indigo-600 hover:text-indigo-800"
                       >
                         Copy
@@ -6666,10 +6700,15 @@ const ProjectDetail = () => {
                     </div>
                     {shareStatus.expiresAt && (
                       <p className="text-xs text-blue-600 mt-2">
-                        Expires: {new Intl.DateTimeFormat("en-US", { dateStyle: "long" }).format(new Date(shareStatus.expiresAt))}
+                        Expires:{" "}
+                        {new Intl.DateTimeFormat("en-US", {
+                          dateStyle: "long",
+                        }).format(new Date(shareStatus.expiresAt))}
                       </p>
                     )}
-                    <p className="text-xs text-blue-600 mt-1">The PIN was shown when the link was first created.</p>
+                    <p className="text-xs text-blue-600 mt-1">
+                      The PIN was shown when the link was first created.
+                    </p>
                   </div>
 
                   <button
@@ -6684,8 +6723,9 @@ const ProjectDetail = () => {
                 /* No active share — offer to create */
                 <div className="space-y-4">
                   <p className="text-xs text-gray-600">
-                    Create a read-only review link for this project. The client will need a 4-digit PIN to access it.
-                    The link expires in 30 days.
+                    Create a read-only review link for this project. The client
+                    will need a 4-digit PIN to access it. The link expires in 30
+                    days.
                   </p>
                   <button
                     onClick={handleCreateShare}

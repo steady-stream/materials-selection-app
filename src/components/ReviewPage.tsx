@@ -507,7 +507,10 @@ function ProductCard({ li }: { li: ReviewLineItem }) {
 
 function SectionPane({ category, items }: CategoryGroup) {
   const totalBudget = items.reduce((sum, li) => sum + (li.totalCost ?? 0), 0);
-  const totalAllowance = items.reduce((sum, li) => sum + (li.allowance ?? 0), 0);
+  const totalAllowance = items.reduce(
+    (sum, li) => sum + (li.allowance ?? 0),
+    0,
+  );
 
   return (
     <div>
