@@ -201,73 +201,147 @@ function AlternateOptions({
   unit: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [altImgModal, setAltImgModal] = useState<string | null>(null);
 
   return (
-    <div className="border-t border-gray-100">
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-5 py-2.5 text-xs hover:bg-gray-50 transition-colors"
-      >
-        <span className="font-semibold text-amber-700">
-          {options.length} Alternative Option{options.length !== 1 ? "s" : ""}{" "}
-          Considered
-        </span>
-        <svg
-          className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
+    <>
+      <div className="border-t border-gray-100">
+        {/* Toggle row — amber tinted background so it reads as interactive */}
+        <button
+          onClick={() => setOpen(!open)}
+          className="w-full flex items-center justify-between px-5 py-3 text-xs transition-colors bg-amber-50 hover:bg-amber-100"
         >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M19 9l-7 7-7-7"
-          />
-        </svg>
-      </button>
-
-      {open && (
-        <div className="px-5 pb-4 space-y-2.5">
-          {options.map(({ option, product, manufacturer }) => (
-            <div
-              key={option.id}
-              className="flex items-start justify-between gap-4 bg-amber-50 border border-amber-100 rounded-lg px-4 py-3"
+          <div className="flex items-center gap-2">
+            {/* Chevron icon — prominent, amber, rotates on open */}
+            <svg
+              className={`w-5 h-5 text-amber-600 transition-transform duration-200 flex-shrink-0 ${open ? "rotate-180" : ""}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2.5}
             >
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-gray-800">
-                  {product.name}
-                </p>
-                {product.modelNumber && (
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    Model: {product.modelNumber}
-                  </p>
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M19 9l-7 7-7-7"
+              />
+            </svg>
+            <span className="font-semibold text-amber-800">
+              {options.length} Alternative Option
+              {options.length !== 1 ? "s" : ""} Considered
+            </span>
+          </div>
+          <span className="text-amber-500 text-[10px] font-medium uppercase tracking-wide">
+            {open ? "Collapse" : "Expand"}
+          </span>
+        </button>
+
+        {open && (
+          <div className="px-5 pb-4 pt-3 space-y-3 bg-amber-50/40">
+            {options.map(({ option, product, manufacturer }) => (
+              <div
+                key={option.id}
+                className="flex items-start gap-3 bg-white border border-amber-100 rounded-lg px-4 py-3"
+              >
+                {/* Small clickable thumbnail — only shown if image exists */}
+                {product.imageUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setAltImgModal(product.imageUrl!)}
+                    className="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border border-gray-100 bg-gray-50 hover:opacity-80 transition-opacity focus:outline-none focus:ring-2 focus:ring-[#1F4788]"
+                    aria-label="View product image"
+                  >
+                    <img
+                      src={product.imageUrl}
+                      alt={product.name}
+                      className="w-full h-full object-contain p-1"
+                    />
+                  </button>
                 )}
-                {manufacturer?.name && (
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    {manufacturer.name}
+
+                <div className="flex-1 min-w-0">
+                  {/* Product name + tier badge on same row */}
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-xs font-semibold text-gray-800 leading-snug">
+                      {product.name}
+                    </p>
+                    {product.tier && (
+                      <span className="flex-shrink-0 text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">
+                        {product.tier}
+                      </span>
+                    )}
+                  </div>
+                  {product.description && (
+                    <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">
+                      {product.description}
+                    </p>
+                  )}
+                  {product.modelNumber && (
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      Model: {product.modelNumber}
+                    </p>
+                  )}
+                  {manufacturer?.name && (
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {manufacturer.name}
+                    </p>
+                  )}
+                  {(product.color || product.collection) && (
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {[product.color, product.collection]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                  )}
+                </div>
+
+                <div className="text-right flex-shrink-0">
+                  <p className="text-xs font-bold text-gray-700">
+                    {fmt(option.unitCost)}
+                    <span className="text-gray-400 font-normal">
+                      {" "}
+                      / {unit || "unit"}
+                    </span>
                   </p>
-                )}
+                  {parentQty != null && option.unitCost != null && (
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {fmt(parentQty * option.unitCost)} total
+                    </p>
+                  )}
+                </div>
               </div>
-              <div className="text-right flex-shrink-0">
-                <p className="text-xs font-bold text-gray-700">
-                  {fmt(option.unitCost)}
-                  <span className="text-gray-400 font-normal">
-                    {" "}
-                    / {unit || "unit"}
-                  </span>
-                </p>
-                {parentQty != null && option.unitCost != null && (
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    {fmt(parentQty * option.unitCost)} total
-                  </p>
-                )}
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Alt option image modal */}
+      {altImgModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setAltImgModal(null)}
+        >
+          <div
+            className="relative max-w-2xl max-h-[85vh] bg-white rounded-2xl shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setAltImgModal(null)}
+              className="absolute top-3 right-3 z-10 bg-white/90 hover:bg-white rounded-full w-8 h-8 flex items-center justify-center text-gray-600 shadow"
+              aria-label="Close image"
+            >
+              ✕
+            </button>
+            <img
+              src={altImgModal}
+              alt="Product"
+              className="max-w-full max-h-[80vh] object-contain p-4"
+            />
+          </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
 
@@ -282,149 +356,149 @@ function ProductCard({ li }: { li: ReviewLineItem }) {
 
   return (
     <>
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-      {/* Card header */}
-      <div className="px-6 pt-5 pb-4 border-b border-gray-100 flex items-start justify-between gap-4">
-        <h3 className="text-sm font-bold text-[#1F4788] leading-snug">
-          {li.name}
-        </h3>
-        <div className="flex-shrink-0">
-          <StatusBadge status={li.status} tier={li.product?.tier} />
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+        {/* Card header */}
+        <div className="px-6 pt-5 pb-4 border-b border-gray-100 flex items-start justify-between gap-4">
+          <h3 className="text-sm font-bold text-[#1F4788] leading-snug">
+            {li.name}
+          </h3>
+          <div className="flex-shrink-0">
+            <StatusBadge status={li.status} tier={li.product?.tier} />
+          </div>
         </div>
-      </div>
 
-      {/* Card body */}
-      <div className="flex gap-5 px-6 py-5">
-        {/* Left: details */}
-        <div className="flex-1 space-y-2 min-w-0">
-          {li.product?.name && (
-            <DetailRow label="Product" value={li.product.name} />
-          )}
-          {(li.product?.description || li.material) && (
-            <DetailRow
-              label="Description"
-              value={(li.product?.description || li.material) ?? ""}
-            />
-          )}
-          {li.product?.modelNumber && (
-            <DetailRow label="Model #" value={li.product.modelNumber} />
-          )}
-          {li.manufacturer?.name && (
-            <DetailRow label="Manufacturer" value={li.manufacturer.name} />
-          )}
-          {li.vendor?.name && (
-            <DetailRow label="Vendor" value={li.vendor.name} />
-          )}
-          {li.product?.color && (
-            <DetailRow label="Color" value={li.product.color} />
-          )}
-          {li.product?.collection && (
-            <DetailRow label="Collection" value={li.product.collection} />
-          )}
+        {/* Card body */}
+        <div className="flex gap-5 px-6 py-5">
+          {/* Left: details */}
+          <div className="flex-1 space-y-2 min-w-0">
+            {li.product?.name && (
+              <DetailRow label="Product" value={li.product.name} />
+            )}
+            {(li.product?.description || li.material) && (
+              <DetailRow
+                label="Description"
+                value={(li.product?.description || li.material) ?? ""}
+              />
+            )}
+            {li.product?.modelNumber && (
+              <DetailRow label="Model #" value={li.product.modelNumber} />
+            )}
+            {li.manufacturer?.name && (
+              <DetailRow label="Manufacturer" value={li.manufacturer.name} />
+            )}
+            {li.vendor?.name && (
+              <DetailRow label="Vendor" value={li.vendor.name} />
+            )}
+            {li.product?.color && (
+              <DetailRow label="Color" value={li.product.color} />
+            )}
+            {li.product?.collection && (
+              <DetailRow label="Collection" value={li.product.collection} />
+            )}
 
-          {/* Pricing row */}
-          <div className="flex flex-wrap gap-x-6 gap-y-1 pt-2 mt-1 border-t border-gray-100">
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-xs text-gray-400">Qty</span>
-              <span className="text-xs font-semibold text-gray-700">
-                {li.quantity ?? "—"}
-                {li.unit ? ` ${li.unit}` : ""}
-              </span>
+            {/* Pricing row */}
+            <div className="flex flex-wrap gap-x-6 gap-y-1 pt-2 mt-1 border-t border-gray-100">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-xs text-gray-400">Qty</span>
+                <span className="text-xs font-semibold text-gray-700">
+                  {li.quantity ?? "—"}
+                  {li.unit ? ` ${li.unit}` : ""}
+                </span>
+              </div>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-xs text-gray-400">Unit Cost</span>
+                <span className="text-xs font-semibold text-gray-700">
+                  {fmt(li.unitCost)}
+                </span>
+              </div>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-xs text-gray-400">Total</span>
+                <span className="text-sm font-bold text-[#1F4788]">
+                  {fmt(li.totalCost)}
+                </span>
+              </div>
             </div>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-xs text-gray-400">Unit Cost</span>
-              <span className="text-xs font-semibold text-gray-700">
-                {fmt(li.unitCost)}
-              </span>
-            </div>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-xs text-gray-400">Total</span>
-              <span className="text-sm font-bold text-[#1F4788]">
-                {fmt(li.totalCost)}
-              </span>
-            </div>
+
+            {safeUrl && (
+              <a
+                href={safeUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block text-xs text-[#1F4788] underline mt-1 truncate max-w-full"
+              >
+                {li.product?.productUrl}
+              </a>
+            )}
           </div>
 
-          {safeUrl && (
-            <a
-              href={safeUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-block text-xs text-[#1F4788] underline mt-1 truncate max-w-full"
+          {/* Right: product image — click to expand */}
+          {li.product?.imageUrl && (
+            <button
+              type="button"
+              onClick={() => setImgModal(true)}
+              className="flex-shrink-0 w-32 h-32 rounded-xl overflow-hidden border border-gray-100 bg-gray-50 cursor-pointer hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-[#1F4788]"
+              aria-label="View full image"
             >
-              {li.product?.productUrl}
-            </a>
+              <img
+                src={li.product.imageUrl}
+                alt={li.product.name}
+                className="w-full h-full object-contain p-1"
+              />
+            </button>
           )}
         </div>
 
-        {/* Right: product image — click to expand */}
-        {li.product?.imageUrl && (
-          <button
-            type="button"
-            onClick={() => setImgModal(true)}
-            className="flex-shrink-0 w-32 h-32 rounded-xl overflow-hidden border border-gray-100 bg-gray-50 cursor-pointer hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-[#1F4788]"
-            aria-label="View full image"
+        {/* Allowance footer — navy bar matching PPT */}
+        {li.allowance != null && li.allowance > 0 && (
+          <div
+            className="flex items-center justify-between px-6 py-2.5"
+            style={{ background: "#1F4788" }}
           >
-            <img
-              src={li.product.imageUrl}
-              alt={li.product.name}
-              className="w-full h-full object-contain p-1"
-            />
-          </button>
+            <span className="text-xs font-bold text-white uppercase tracking-widest">
+              Allowance
+            </span>
+            <span className="text-sm font-bold text-white">
+              {fmt(li.allowance)}
+            </span>
+          </div>
+        )}
+
+        {/* Alternate options collapsible */}
+        {li.options && li.options.length > 0 && (
+          <AlternateOptions
+            options={li.options}
+            parentQty={li.quantity}
+            unit={li.unit}
+          />
         )}
       </div>
 
-      {/* Allowance footer — navy bar matching PPT */}
-      {li.allowance != null && li.allowance > 0 && (
+      {/* Expanded image modal */}
+      {imgModal && li.product?.imageUrl && (
         <div
-          className="flex items-center justify-between px-6 py-2.5"
-          style={{ background: "#1F4788" }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setImgModal(false)}
         >
-          <span className="text-xs font-bold text-white uppercase tracking-widest">
-            Allowance
-          </span>
-          <span className="text-sm font-bold text-white">
-            {fmt(li.allowance)}
-          </span>
-        </div>
-      )}
-
-      {/* Alternate options collapsible */}
-      {li.options && li.options.length > 0 && (
-        <AlternateOptions
-          options={li.options}
-          parentQty={li.quantity}
-          unit={li.unit}
-        />
-      )}
-    </div>
-
-    {/* Expanded image modal */}
-    {imgModal && li.product?.imageUrl && (
-      <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-        onClick={() => setImgModal(false)}
-      >
-        <div
-          className="relative max-w-3xl max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            type="button"
-            onClick={() => setImgModal(false)}
-            className="absolute top-3 right-3 z-10 bg-white/90 hover:bg-white rounded-full w-8 h-8 flex items-center justify-center text-gray-600 shadow"
-            aria-label="Close image"
+          <div
+            className="relative max-w-3xl max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
           >
-            ✕
-          </button>
-          <img
-            src={li.product.imageUrl}
-            alt={li.product.name}
-            className="max-w-full max-h-[85vh] object-contain p-4"
-          />
+            <button
+              type="button"
+              onClick={() => setImgModal(false)}
+              className="absolute top-3 right-3 z-10 bg-white/90 hover:bg-white rounded-full w-8 h-8 flex items-center justify-center text-gray-600 shadow"
+              aria-label="Close image"
+            >
+              ✕
+            </button>
+            <img
+              src={li.product.imageUrl}
+              alt={li.product.name}
+              className="max-w-full max-h-[85vh] object-contain p-4"
+            />
+          </div>
         </div>
-      </div>
-    )}
+      )}
     </>
   );
 }
@@ -433,28 +507,41 @@ function ProductCard({ li }: { li: ReviewLineItem }) {
 
 function SectionPane({ category, items }: CategoryGroup) {
   const totalBudget = items.reduce((sum, li) => sum + (li.totalCost ?? 0), 0);
+  const totalAllowance = items.reduce((sum, li) => sum + (li.allowance ?? 0), 0);
 
   return (
     <div>
-      {/* Section hero — mimics PPT section slide: navy block, large category name */}
+      {/* Section header — compact horizontal layout */}
       <div
-        className="rounded-2xl px-8 py-10 mb-6 text-center"
+        className="rounded-xl px-5 py-3.5 mb-5 flex items-center justify-between gap-4"
         style={{ background: "#1F4788" }}
       >
-        <h2 className="text-2xl font-bold text-white tracking-tight">
-          {category.name}
-        </h2>
-        {category.description && (
-          <p className="text-blue-200 text-sm mt-2 max-w-xl mx-auto">
-            {category.description}
+        <div className="min-w-0">
+          <h2 className="text-base font-bold text-white leading-tight truncate">
+            {category.name}
+          </h2>
+          {category.description && (
+            <p className="text-blue-300 text-xs mt-0.5 truncate">
+              {category.description}
+            </p>
+          )}
+        </div>
+        <div className="flex-shrink-0 text-right">
+          <p className="text-blue-300 text-xs">
+            Total{" "}
+            <span className="text-white font-bold text-sm ml-1">
+              {fmt(totalBudget)}
+            </span>
           </p>
-        )}
-        <p className="text-blue-300 text-xs mt-3">
-          Section Total:{" "}
-          <span className="text-white font-bold text-sm">
-            {fmt(totalBudget)}
-          </span>
-        </p>
+          {totalAllowance > 0 && (
+            <p className="text-blue-300 text-xs mt-0.5">
+              Allowance{" "}
+              <span className="text-white font-bold ml-1">
+                {fmt(totalAllowance)}
+              </span>
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Product cards */}
