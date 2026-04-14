@@ -42,7 +42,8 @@ const SHARES_TABLE = process.env.SHARES_TABLE_NAME || "ProjectShares-test";
 // Base URL used when constructing the share link shown to the MegaPros user
 // Set REVIEW_BASE_URL on each lambda: test = https://mpmaterials.apiaconsulting.com
 //                                     prod = https://d377ynyh0ngsji.cloudfront.net (until custom domain is live)
-const REVIEW_BASE_URL = process.env.REVIEW_BASE_URL || "https://mpmaterials.apiaconsulting.com";
+const REVIEW_BASE_URL =
+  process.env.REVIEW_BASE_URL || "https://mpmaterials.apiaconsulting.com";
 
 const SHARE_TTL_DAYS = 30;
 const MAX_FAILED_PIN_ATTEMPTS = 5;
@@ -938,11 +939,12 @@ async function getReviewData(shareToken, pin) {
     const options = (optionResults[idx] || [])
       .filter((opt) => !opt.isSelected)
       .map((opt) => ({
-        ...opt,
+        option: opt,
         product: productsMap[opt.productId] || null,
         manufacturer: productsMap[opt.productId]?.manufacturerId
           ? manufacturersMap[productsMap[opt.productId].manufacturerId] || null
           : null,
+        vendor: null,
       }));
 
     return {

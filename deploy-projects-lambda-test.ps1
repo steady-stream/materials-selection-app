@@ -18,14 +18,14 @@
 
 $ErrorActionPreference = "Stop"
 
-$PROFILE   = "megapros-test"
-$REGION    = "us-east-1"
+$PROFILE = "megapros-test"
+$REGION = "us-east-1"
 $FUNC_NAME = "MaterialsSelection-Projects-API"
 
-$ROOT       = $PSScriptRoot
+$ROOT = $PSScriptRoot
 $LAMBDA_DIR = Join-Path $ROOT "lambda\projects"
 $DEPLOY_DIR = Join-Path $ROOT "lambda\deploy"
-$ZIP_PATH   = Join-Path $DEPLOY_DIR "projects.zip"
+$ZIP_PATH = Join-Path $DEPLOY_DIR "projects.zip"
 
 # SharePoint secrets must exist (same file used by deploy-new-lambdas.ps1)
 $secretsFile = Join-Path $ROOT "aws\secrets.ps1"
@@ -78,6 +78,10 @@ aws lambda update-function-code `
 
 if ($LASTEXITCODE -ne 0) { Write-Error "update-function-code failed"; exit 1 }
 
+# Wait for the code update to propagate before updating config (avoids ResourceConflictException)
+Write-Host "      Waiting for code update to propagate..."
+aws lambda wait function-updated --function-name $FUNC_NAME --profile $PROFILE --region $REGION
+
 # Build env vars JSON — include SharePoint vars + new share/review vars
 $envVars = @{
     SHAREPOINT_LIBRARY     = "Projects"
@@ -91,8 +95,8 @@ $envVars = @{
 }
 
 $inner = ($envVars.GetEnumerator() | ForEach-Object {
-    "`"$($_.Key)`":`"$($_.Value)`""
-}) -join ","
+        "`"$($_.Key)`":`"$($_.Value)`""
+    }) -join ","
 $envJson = "{`"Variables`":{$inner}}"
 
 aws lambda update-function-configuration `
