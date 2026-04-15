@@ -19,7 +19,7 @@ Client meeting produced two categories of feedback: product catalog setup issues
 | P3  | Need "Color" field on product                 | Missing field — requires Lambda deploy                            | Session 2  |
 | P4  | Need "Finish" field on product                | Missing field — hold for client finish list                       | Session 2+ |
 | P5  | Can't see/edit vendor from Edit Product modal | UX gap — Vendors button exists in table but not linked from modal | Session 1  |
-| P6  | Image file upload (vs URL field)              | Feature gap — needs S3 presigned URL infra                        | Deferred   |
+| P6  | Image file upload (vs URL field)              | ✅ Done — presigned URL upload + URL mode                         | Session 2  |
 | P7  | Clone product                                 | Feature gap — no clone button                                     | Session 1  |
 | P8  | Add manufacturer on the fly                   | Feature gap — no inline create in dropdown                        | Session 3  |
 
@@ -115,4 +115,8 @@ Client meeting produced two categories of feedback: product catalog setup issues
 
 ## Deferred
 
-- **P6 — Image file upload**: Requires S3 presigned URL infrastructure (bucket policy changes, new Lambda endpoint for URL generation, multipart upload from frontend). Defer until product catalog is stable.
+- **P4 — Finish field**: On hold pending client finish list by brand.
+
+## Completed (Previously Deferred)
+
+- **P6 — Image file upload**: ✅ Implemented — S3 presigned URL via `GET /products/upload-url` in Catalog lambda, frontend supports both file upload and URL modes, 5 MB limit, MIME type validation (jpeg/png/webp/gif). S3 bucket: `materials-product-images-{accountId}` (separate per environment).

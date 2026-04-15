@@ -1,6 +1,6 @@
 # Materials Selection App - Development Status
 
-**Last Updated:** April 13, 2026  
+**Last Updated:** April 15, 2026  
 **Environments:** Test (mpmaterials.apiaconsulting.com) | Production (d377ynyh0ngsji.cloudfront.net)
 
 ## Current Status Summary
@@ -18,19 +18,20 @@
 - All allowance fields increment by 1 (not 0.01)
 - **SharePoint manual folder link** — "Link SharePoint" button on Project Detail
 - **Color field** on products (catalog lambda + frontend)
-- **Client feedback items P1–P5, P7–P8, L1–L5** — all implemented and deployed
+- **Product image upload** — S3 presigned URL via Catalog lambda, frontend upload + URL modes
+- **Client feedback items P1–P6, P7–P8, L1–L5** — all implemented and deployed
+- **Custom branding** — Expertise Delivered logo (favicon + header), transparent circular crop, "MegaPros Materials Selection" tab title
 
 ✅ **Working — Production environment (AWS account 860601623272):**
 
 - All of the above — **test and prod are now in full sync**
 - Split lambda architecture deployed to prod (April 13, 2026) via `migrate-prod-lambdas.ps1`
-- Frontend deployed to prod (April 13, 2026)
+- Frontend deployed to prod (April 15, 2026)
 
 ⚠️ **Known Issues / Pending:**
 
 - Orders/files/SharePoint API routes (`/orders`, `/receipts`, `/projects/{id}/files`, `/projects/{id}/sharepoint/*`) not yet added to prod API Gateway (routes don't exist, not just unwired)
 - P4 (Finish field) — on hold pending client finish list by brand
-- P6 (Product image upload) — deferred; requires S3 presigned URL infrastructure
 
 ### Bug Fixes (March 10, 2026)
 
@@ -88,6 +89,28 @@ exclusively. No human action required.**
 
 ---
 
+## Session Summary — April 15, 2026
+
+### Branding & UX
+
+- **Browser tab**: Changed title from "webprototype" to "MegaPros Materials Selection"
+- **Favicon**: Replaced Vite default (`vite.svg`) with `expertise_icon.svg` — Expertise Delivered logo with transparent background
+- **Header logo**: Replaced generic building SVG with `expertise_header.png` — Expertise Delivered logo with transparent circular crop
+- **Image processing**: Used Pillow to remove black square background outside the circle, added thin black border outline, preserved circle contents
+- Deployed to both test and production
+
+### Documentation
+
+- **P6 status corrected** in `DEVELOPMENT_STATUS.md` and `CLIENT_FEEDBACK_PLAN.md` — product image upload was already live but docs still showed it as deferred
+
+### Git Commits (April 15, 2026)
+
+| Hash      | Description                                                |
+| --------- | ---------------------------------------------------------- |
+| _(below)_ | Branding: custom logo/favicon, transparent bg, doc updates |
+
+---
+
 ## Session Summary — April 13, 2026
 
 ### Client Feedback — All Items Implemented & Deployed
@@ -101,7 +124,7 @@ All items from the April 2026 client meeting are now live in both test and produ
 | P3  | Color field added to products (frontend + catalog Lambda)       | ✅ Done                                                |
 | P4  | Finish field                                                    | ⏳ Hold — awaiting client finish list by brand         |
 | P5  | Vendor shortcut in Edit Product modal                           | ✅ Done                                                |
-| P6  | Product image upload                                            | ⏳ Deferred — requires S3 presigned URL infrastructure |
+| P6  | Product image upload                                            | ✅ Done                                                |
 | P7  | Clone product                                                   | ✅ Done                                                |
 | P8  | Add manufacturer on the fly                                     | ✅ Done                                                |
 | L1  | Qty column wider / easier to read                               | ✅ Done                                                |
