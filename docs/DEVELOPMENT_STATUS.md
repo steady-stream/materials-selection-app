@@ -107,7 +107,7 @@ exclusively. No human action required.**
 
 | Hash      | Description                                                |
 | --------- | ---------------------------------------------------------- |
-| _(below)_ | Branding: custom logo/favicon, transparent bg, doc updates |
+| `fb55923` | Branding: custom logo/favicon, transparent bg, doc updates |
 
 ---
 
