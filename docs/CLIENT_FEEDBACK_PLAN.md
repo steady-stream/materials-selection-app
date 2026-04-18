@@ -17,7 +17,7 @@ Client meeting produced two categories of feedback: product catalog setup issues
 | P1  | "PC" unit missing from unit select            | Bug — option just not in list                                     | Session 1  |
 | P2  | No category dropdown — free-text only         | UX gap — field exists, no autocomplete                            | Session 1  |
 | P3  | Need "Color" field on product                 | Missing field — requires Lambda deploy                            | Session 2  |
-| P4  | Need "Finish" field on product                | Missing field — hold for client finish list                       | Session 2+ |
+| P4  | Need "Finish" field on product                | ✅ Done — full stack (Lambda + all components + PPTX + Review)    | Session 2  |
 | P5  | Can't see/edit vendor from Edit Product modal | UX gap — Vendors button exists in table but not linked from modal | Session 1  |
 | P6  | Image file upload (vs URL field)              | ✅ Done — presigned URL upload + URL mode                         | Session 2  |
 | P7  | Clone product                                 | Feature gap — no clone button                                     | Session 1  |
@@ -95,8 +95,16 @@ Client meeting produced two categories of feedback: product catalog setup issues
    - `ProductList.tsx`: add color dropdown (standard construction colors)
    - Deploy `lambda/catalog` to test, validate, then prod
 
-2. **P4 — Finish field** (hold for client finish list per brand)
-   - Same scope as P3 once list is received
+2. **P4 — Finish field** ✅ Done (April 18, 2026)
+   - `types/index.ts`: added `finish?: string` to `Product`, `CreateProductRequest`, `UpdateProductRequest`
+   - `lambda/catalog/index.js`: added `finish` to `createProduct()`
+   - `ProductList.tsx`: finish form input with 36-item datalist, filter, search, tooltip
+   - `ProjectDetail.tsx`: finish filter + quick-add + tooltips (line item + insert product)
+   - `ChooseOptionsModal.tsx`: finish filter + tooltip
+   - `ReviewPage.tsx`: finish in table row subtitle + detail panel
+   - `pptxService.ts`: finish + color + collection added to PowerPoint slide details
+   - Color datalist cleaned (removed 9 finishes, added 14 basic colors)
+   - Deployed to test and prod
 
 ---
 
@@ -112,10 +120,6 @@ Client meeting produced two categories of feedback: product catalog setup issues
    - Saves to catalog and immediately inserts as line item
 
 ---
-
-## Deferred
-
-- **P4 — Finish field**: On hold pending client finish list by brand.
 
 ## Completed (Previously Deferred)
 

@@ -329,6 +329,7 @@ async function createProduct(data) {
     tier: data.tier || null,
     collection: data.collection || null,
     color: data.color || null,
+    finish: data.finish || null,
     imageUrl: data.imageUrl || null,
     productUrl: data.productUrl || null,
     createdAt: new Date().toISOString(),

@@ -148,6 +148,7 @@ const ProjectDetail = () => {
   });
   const [filterCollection, setFilterCollection] = useState<string>("");
   const [filterColor, setFilterColor] = useState<string>("");
+  const [filterFinish, setFilterFinish] = useState<string>("");
   const [hoverInsertProduct, setHoverInsertProduct] = useState<string | null>(
     null,
   );
@@ -187,6 +188,7 @@ const ProjectDetail = () => {
     unit: string;
     tier: "" | "good" | "better" | "best";
     color: string;
+    finish: string;
   }>({
     name: "",
     manufacturerId: "",
@@ -196,6 +198,7 @@ const ProjectDetail = () => {
     unit: "ea",
     tier: "",
     color: "",
+    finish: "",
   });
   const [showQAMfrInInsert, setShowQAMfrInInsert] = useState(false);
   const [qaInsertMfrName, setQaInsertMfrName] = useState("");
@@ -1073,6 +1076,7 @@ const ProjectDetail = () => {
       setFilterTier({ good: false, better: false, best: false });
       setFilterCollection("");
       setFilterColor("");
+      setFilterFinish("");
       setInsertQuantity(1);
       setInsertUnitCost(0);
       setInsertVendorId("");
@@ -1145,6 +1149,7 @@ const ProjectDetail = () => {
       setFilterTier({ good: false, better: false, best: false });
       setFilterCollection("");
       setFilterColor("");
+      setFilterFinish("");
       setInsertQuantity(1);
       setInsertUnitCost(0);
       setInsertVendorId("");
@@ -1175,6 +1180,9 @@ const ProjectDetail = () => {
         ...(quickAddProduct.color.trim() && {
           color: quickAddProduct.color.trim(),
         }),
+        ...(quickAddProduct.finish.trim() && {
+          finish: quickAddProduct.finish.trim(),
+        }),
       };
       const created = await productService.createProduct(req);
       setProducts((prev) => [...prev, created]);
@@ -1188,6 +1196,7 @@ const ProjectDetail = () => {
         unit: "ea",
         tier: "",
         color: "",
+        finish: "",
       });
       setShowQAMfrInInsert(false);
       setQaInsertMfrName("");
@@ -1984,6 +1993,7 @@ const ProjectDetail = () => {
                   setFilterTier({ good: false, better: false, best: false });
                   setFilterCollection("");
                   setFilterColor("");
+                  setFilterFinish("");
                   setSearchTerm("");
                   setSelectedCategoryForInsert(categories[0]?.id || "");
                   setInsertQuantity(1);
@@ -2591,6 +2601,14 @@ const ProjectDetail = () => {
                                                     Color:
                                                   </span>
                                                   <span>{prod.color}</span>
+                                                </>
+                                              )}
+                                              {prod.finish && (
+                                                <>
+                                                  <span className="text-gray-500">
+                                                    Finish:
+                                                  </span>
+                                                  <span>{prod.finish}</span>
                                                 </>
                                               )}
                                               {prod.unit && (
@@ -4828,6 +4846,7 @@ const ProjectDetail = () => {
                         unit: "ea",
                         tier: "",
                         color: "",
+                        finish: "",
                       });
                       setShowQAMfrInInsert(false);
                       setQaInsertMfrName("");
@@ -4849,6 +4868,7 @@ const ProjectDetail = () => {
                   setFilterTier({ good: false, better: false, best: false });
                   setFilterCollection("");
                   setFilterColor("");
+                  setFilterFinish("");
                   setInsertVendorId("");
                   setShowQuickAddProduct(false);
                   setQuickAddProduct({
@@ -4860,6 +4880,7 @@ const ProjectDetail = () => {
                     unit: "ea",
                     tier: "",
                     color: "",
+                    finish: "",
                   });
                   setShowQAMfrInInsert(false);
                   setQaInsertMfrName("");
@@ -4872,7 +4893,7 @@ const ProjectDetail = () => {
 
             {/* Filter Section */}
             <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg mb-4 space-y-3">
-              <div className="grid grid-cols-6 gap-3">
+              <div className="grid grid-cols-4 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">
                     Search
@@ -4960,6 +4981,27 @@ const ProjectDetail = () => {
                       .map((color) => (
                         <option key={color} value={color}>
                           {color}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Finish
+                  </label>
+                  <select
+                    value={filterFinish}
+                    onChange={(e) => setFilterFinish(e.target.value)}
+                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="">All Finishes</option>
+                    {Array.from(
+                      new Set(products.map((p) => p.finish).filter(Boolean)),
+                    )
+                      .sort()
+                      .map((finish) => (
+                        <option key={finish} value={finish}>
+                          {finish}
                         </option>
                       ))}
                   </select>
@@ -5261,8 +5303,8 @@ const ProjectDetail = () => {
                     />
                   </div>
                 </div>
-                {/* Row 2: Description, Color, Unit, Tier */}
-                <div className="grid grid-cols-4 gap-2 mb-2">
+                {/* Row 2: Description, Color, Finish, Unit, Tier */}
+                <div className="grid grid-cols-5 gap-2 mb-2">
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">
                       Description
@@ -5291,6 +5333,23 @@ const ProjectDetail = () => {
                         setQuickAddProduct((prev) => ({
                           ...prev,
                           color: e.target.value,
+                        }))
+                      }
+                      placeholder="Optional..."
+                      className="w-full px-2 py-1 text-xs border border-indigo-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Finish
+                    </label>
+                    <input
+                      type="text"
+                      value={quickAddProduct.finish}
+                      onChange={(e) =>
+                        setQuickAddProduct((prev) => ({
+                          ...prev,
+                          finish: e.target.value,
                         }))
                       }
                       placeholder="Optional..."
@@ -5366,6 +5425,7 @@ const ProjectDetail = () => {
                         unit: "ea",
                         tier: "",
                         color: "",
+                        finish: "",
                       });
                       setShowQAMfrInInsert(false);
                       setQaInsertMfrName("");
@@ -5479,6 +5539,13 @@ const ProjectDetail = () => {
                       if (filterColor) {
                         filtered = filtered.filter(
                           (p) => p.color === filterColor,
+                        );
+                      }
+
+                      // Finish filter
+                      if (filterFinish) {
+                        filtered = filtered.filter(
+                          (p) => p.finish === filterFinish,
                         );
                       }
 
@@ -5617,6 +5684,14 @@ const ProjectDetail = () => {
                                               Color:
                                             </span>
                                             <span>{product.color}</span>
+                                          </>
+                                        )}
+                                        {product.finish && (
+                                          <>
+                                            <span className="text-gray-500">
+                                              Finish:
+                                            </span>
+                                            <span>{product.finish}</span>
                                           </>
                                         )}
                                         {product.tier && (
@@ -5769,6 +5844,7 @@ const ProjectDetail = () => {
                   setFilterTier({ good: false, better: false, best: false });
                   setFilterCollection("");
                   setFilterColor("");
+                  setFilterFinish("");
                   setInsertVendorId("");
                   setShowQuickAddProduct(false);
                   setQuickAddProduct({
@@ -5780,6 +5856,7 @@ const ProjectDetail = () => {
                     unit: "ea",
                     tier: "",
                     color: "",
+                    finish: "",
                   });
                   setShowQAMfrInInsert(false);
                   setQaInsertMfrName("");

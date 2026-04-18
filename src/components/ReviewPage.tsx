@@ -286,9 +286,9 @@ function AlternateOptions({
                       {manufacturer.name}
                     </p>
                   )}
-                  {(product.color || product.collection) && (
+                  {(product.color || product.finish || product.collection) && (
                     <p className="text-xs text-gray-400 mt-0.5">
-                      {[product.color, product.collection]
+                      {[product.color, product.finish, product.collection]
                         .filter(Boolean)
                         .join(" · ")}
                     </p>
@@ -391,6 +391,9 @@ function ProductCard({ li }: { li: ReviewLineItem }) {
             )}
             {li.product?.color && (
               <DetailRow label="Color" value={li.product.color} />
+            )}
+            {li.product?.finish && (
+              <DetailRow label="Finish" value={li.product.finish} />
             )}
             {li.product?.collection && (
               <DetailRow label="Collection" value={li.product.collection} />

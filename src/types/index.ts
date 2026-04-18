@@ -72,6 +72,7 @@ export interface Product {
   tier?: "good" | "better" | "best";
   collection?: string;
   color?: string;
+  finish?: string;
   imageUrl?: string;
   productUrl?: string;
   createdAt: string;
@@ -289,6 +290,7 @@ export interface CreateProductRequest {
   tier?: "good" | "better" | "best";
   collection?: string;
   color?: string;
+  finish?: string;
   imageUrl?: string;
   productUrl?: string;
 }
@@ -303,6 +305,7 @@ export interface UpdateProductRequest {
   tier?: "good" | "better" | "best";
   collection?: string;
   color?: string;
+  finish?: string;
   imageUrl?: string;
   productUrl?: string;
 }

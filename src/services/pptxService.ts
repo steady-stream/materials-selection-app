@@ -517,6 +517,18 @@ async function generateProductSlide(
     detailsLines.push(`Vendor: ${vendor.name}`);
   }
 
+  if (product?.color) {
+    detailsLines.push(`Color: ${product.color}`);
+  }
+
+  if (product?.finish) {
+    detailsLines.push(`Finish: ${product.finish}`);
+  }
+
+  if (product?.collection) {
+    detailsLines.push(`Collection: ${product.collection}`);
+  }
+
   detailsLines.push(`Quantity: ${lineItem.quantity} ${lineItem.unit}`);
   detailsLines.push(
     `Unit: $${lineItem.unitCost.toFixed(2)} | Total: $${lineItem.totalCost.toFixed(2)}`,

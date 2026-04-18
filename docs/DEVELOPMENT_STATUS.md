@@ -1,6 +1,6 @@
 # Materials Selection App - Development Status
 
-**Last Updated:** April 15, 2026  
+**Last Updated:** April 18, 2026  
 **Environments:** Test (mpmaterials.apiaconsulting.com) | Production (d377ynyh0ngsji.cloudfront.net)
 
 ## Current Status Summary
@@ -19,7 +19,8 @@
 - **SharePoint manual folder link** — "Link SharePoint" button on Project Detail
 - **Color field** on products (catalog lambda + frontend)
 - **Product image upload** — S3 presigned URL via Catalog lambda, frontend upload + URL modes
-- **Client feedback items P1–P6, P7–P8, L1–L5** — all implemented and deployed
+- **Client feedback items P1–P8, L1–L5** — all implemented and deployed (including P4 Finish field)
+- **Finish field** on products — full stack: Catalog Lambda, ProductList, ProjectDetail, ChooseOptionsModal, ReviewPage, PowerPoint export
 - **Custom branding** — Expertise Delivered logo (favicon + header), transparent circular crop, "MegaPros Materials Selection" tab title
 
 ✅ **Working — Production environment (AWS account 860601623272):**
@@ -31,7 +32,6 @@
 ⚠️ **Known Issues / Pending:**
 
 - Orders/files/SharePoint API routes (`/orders`, `/receipts`, `/projects/{id}/files`, `/projects/{id}/sharepoint/*`) not yet added to prod API Gateway (routes don't exist, not just unwired)
-- P4 (Finish field) — on hold pending client finish list by brand
 
 ### Bug Fixes (March 10, 2026)
 
@@ -89,6 +89,38 @@ exclusively. No human action required.**
 
 ---
 
+## Session Summary — April 18, 2026
+
+### P4 — Finish Field (Full Stack)
+
+Client provided finish list (36 finishes). Implemented across the entire stack:
+
+- **Types:** Added `finish?: string` to `Product`, `CreateProductRequest`, `UpdateProductRequest`
+- **Lambda:** `catalog/index.js` — `createProduct()` now persists `finish` attribute
+- **ProductList.tsx:** Finish form input with 36-item datalist, finish filter dropdown, finish in search, finish in hover tooltip
+- **ProjectDetail.tsx:** Finish filter in Insert Product modal, finish in quick-add form (5-col grid), finish in Insert Product tooltip, finish in line item hover tooltip
+- **ChooseOptionsModal.tsx:** Finish filter dropdown, finish in product tooltip
+- **ReviewPage.tsx:** Finish in table row subtitle (Color · Finish · Collection), Finish DetailRow in slide-out panel
+- **pptxService.ts:** Added Color, Finish, and Collection to PowerPoint slide detail lines (none were exported before)
+- **Color cleanup:** Removed 9 finish-type entries from color datalist, added 14 basic colors (30 total)
+
+### Filter Layout Improvements
+
+- ProjectDetail Insert Product modal and ChooseOptionsModal: Changed filter grid from 6 to 4 columns so Collection, Color, and Finish appear together on the second row
+
+### Deployments
+
+- Catalog Lambda deployed to test and prod
+- Frontend deployed to test and prod (3 rounds as issues were caught and fixed)
+
+### Git Commits (April 18, 2026)
+
+| Hash      | Description                                                |
+| --------- | ---------------------------------------------------------- |
+| _(below)_ | feat: P4 finish field — full stack + PowerPoint + Review   |
+
+---
+
 ## Session Summary — April 15, 2026
 
 ### Branding & UX
@@ -117,21 +149,21 @@ exclusively. No human action required.**
 
 All items from the April 2026 client meeting are now live in both test and production. See [CLIENT_FEEDBACK_PLAN.md](./CLIENT_FEEDBACK_PLAN.md) for full detail.
 
-| ID  | Description                                                     | Status                                                 |
-| --- | --------------------------------------------------------------- | ------------------------------------------------------ |
-| P1  | "PC" unit added to unit dropdown                                | ✅ Done                                                |
-| P2  | Category field → dropdown with standard construction categories | ✅ Done                                                |
-| P3  | Color field added to products (frontend + catalog Lambda)       | ✅ Done                                                |
-| P4  | Finish field                                                    | ⏳ Hold — awaiting client finish list by brand         |
-| P5  | Vendor shortcut in Edit Product modal                           | ✅ Done                                                |
-| P6  | Product image upload                                            | ✅ Done                                                |
-| P7  | Clone product                                                   | ✅ Done                                                |
-| P8  | Add manufacturer on the fly                                     | ✅ Done                                                |
-| L1  | Qty column wider / easier to read                               | ✅ Done                                                |
-| L2  | Status change directly in line item table                       | ✅ Done                                                |
-| L3  | Vendor override when inserting product into project             | ✅ Done                                                |
-| L4  | Quick-add product from Insert Product panel                     | ✅ Done                                                |
-| L5  | "Select as Final" shortcut in Choose Options modal              | ✅ Done                                                |
+| ID  | Description                                                     | Status                                         |
+| --- | --------------------------------------------------------------- | ---------------------------------------------- |
+| P1  | "PC" unit added to unit dropdown                                | ✅ Done                                        |
+| P2  | Category field → dropdown with standard construction categories | ✅ Done                                        |
+| P3  | Color field added to products (frontend + catalog Lambda)       | ✅ Done                                        |
+| P4  | Finish field                                                    | ⏳ Hold — awaiting client finish list by brand |
+| P5  | Vendor shortcut in Edit Product modal                           | ✅ Done                                        |
+| P6  | Product image upload                                            | ✅ Done                                        |
+| P7  | Clone product                                                   | ✅ Done                                        |
+| P8  | Add manufacturer on the fly                                     | ✅ Done                                        |
+| L1  | Qty column wider / easier to read                               | ✅ Done                                        |
+| L2  | Status change directly in line item table                       | ✅ Done                                        |
+| L3  | Vendor override when inserting product into project             | ✅ Done                                        |
+| L4  | Quick-add product from Insert Product panel                     | ✅ Done                                        |
+| L5  | "Select as Final" shortcut in Choose Options modal              | ✅ Done                                        |
 
 ### Infrastructure / DevOps
 

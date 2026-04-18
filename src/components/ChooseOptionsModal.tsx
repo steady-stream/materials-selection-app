@@ -36,6 +36,7 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
   const [filterCategory, setFilterCategory] = useState("");
   const [filterCollection, setFilterCollection] = useState("");
   const [filterColor, setFilterColor] = useState("");
+  const [filterFinish, setFilterFinish] = useState("");
   const [filterTier, setFilterTier] = useState({
     good: false,
     better: false,
@@ -291,6 +292,11 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
       filtered = filtered.filter((p) => p.color === filterColor);
     }
 
+    // Finish filter
+    if (filterFinish) {
+      filtered = filtered.filter((p) => p.finish === filterFinish);
+    }
+
     // Vendor filter
     if (filterVendorId) {
       const productIdsForVendor = productVendors
@@ -517,7 +523,7 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
 
         {/* Filter Section */}
         <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg mb-4 space-y-3">
-          <div className="grid grid-cols-6 gap-3">
+          <div className="grid grid-cols-4 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
                 Search
@@ -605,6 +611,27 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
                   .map((color) => (
                     <option key={color} value={color}>
                       {color}
+                    </option>
+                  ))}
+              </select>
+            </div>{" "}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Finish
+              </label>
+              <select
+                value={filterFinish}
+                onChange={(e) => setFilterFinish(e.target.value)}
+                className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="">All Finishes</option>
+                {Array.from(
+                  new Set(products.map((p) => p.finish).filter(Boolean)),
+                )
+                  .sort()
+                  .map((finish) => (
+                    <option key={finish} value={finish}>
+                      {finish}
                     </option>
                   ))}
               </select>
@@ -788,6 +815,14 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
                                         Color:
                                       </span>
                                       <span>{product.color}</span>
+                                    </>
+                                  )}
+                                  {product.finish && (
+                                    <>
+                                      <span className="text-gray-500">
+                                        Finish:
+                                      </span>
+                                      <span>{product.finish}</span>
                                     </>
                                   )}
                                   {product.tier && (

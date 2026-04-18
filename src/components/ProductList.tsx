@@ -27,6 +27,7 @@ const ProductList = () => {
     best: false,
   });
   const [colorFilter, setColorFilter] = useState<string>("");
+  const [finishFilter, setFinishFilter] = useState<string>("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
@@ -75,6 +76,7 @@ const ProductList = () => {
     tier: "" as "" | "good" | "better" | "best",
     collection: "",
     color: "",
+    finish: "",
     imageUrl: "",
     productUrl: "",
   });
@@ -135,6 +137,7 @@ const ProductList = () => {
         tier: (product.tier || "") as "" | "good" | "better" | "best",
         collection: product.collection || "",
         color: product.color || "",
+        finish: product.finish || "",
         imageUrl: product.imageUrl || "",
         productUrl: product.productUrl || "",
       });
@@ -153,6 +156,7 @@ const ProductList = () => {
         tier: "" as "" | "good" | "better" | "best",
         collection: "",
         color: "",
+        finish: "",
         imageUrl: "",
         productUrl: "",
       });
@@ -187,6 +191,7 @@ const ProductList = () => {
       tier: "" as "" | "good" | "better" | "best",
       collection: "",
       color: "",
+      finish: "",
       imageUrl: "",
       productUrl: "",
     });
@@ -211,6 +216,7 @@ const ProductList = () => {
       tier: (product.tier || "") as "" | "good" | "better" | "best",
       collection: product.collection || "",
       color: product.color || "",
+      finish: product.finish || "",
       imageUrl: product.imageUrl || "",
       productUrl: product.productUrl || "",
     });
@@ -555,6 +561,9 @@ const ProductList = () => {
     // Filter by color
     if (colorFilter && product.color !== colorFilter) return false;
 
+    // Filter by finish
+    if (finishFilter && product.finish !== finishFilter) return false;
+
     // Filter by search term
     if (searchTerm) {
       const search = searchTerm.toLowerCase();
@@ -571,6 +580,7 @@ const ProductList = () => {
         product.description?.toLowerCase().includes(search) ||
         product.category?.toLowerCase().includes(search) ||
         product.color?.toLowerCase().includes(search) ||
+        product.finish?.toLowerCase().includes(search) ||
         manufacturer?.name.toLowerCase().includes(search) ||
         vendorNames.toLowerCase().includes(search)
       );
@@ -763,6 +773,24 @@ const ProductList = () => {
               .map((color) => (
                 <option key={color} value={color}>
                   {color}
+                </option>
+              ))}
+          </select>
+        </div>
+        {/* Finish Filter */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-600 font-medium">Finish:</span>
+          <select
+            value={finishFilter}
+            onChange={(e) => setFinishFilter(e.target.value)}
+            className="px-2 py-1 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="">All Finishes</option>
+            {Array.from(new Set(products.map((p) => p.finish).filter(Boolean)))
+              .sort()
+              .map((finish) => (
+                <option key={finish} value={finish}>
+                  {finish}
                 </option>
               ))}
           </select>
@@ -1107,6 +1135,12 @@ const ProductList = () => {
                                 <span>{product.color}</span>
                               </>
                             )}
+                            {product.finish && (
+                              <>
+                                <span className="text-gray-500">Finish:</span>
+                                <span>{product.finish}</span>
+                              </>
+                            )}
                           </div>
                           {productVendorList.length > 0 && (
                             <div className="mt-2 border-t pt-2">
@@ -1445,35 +1479,93 @@ const ProductList = () => {
                     onChange={(e) =>
                       setFormData({ ...formData, color: e.target.value })
                     }
-                    placeholder="e.g., White, Chrome, Brushed Nickel"
+                    placeholder="e.g., White, Gray, Beige"
                     className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
                   />
                   <datalist id="product-colors">
                     <option value="White" />
                     <option value="Off-White" />
+                    <option value="Ivory" />
+                    <option value="Cream" />
                     <option value="Almond" />
                     <option value="Bone" />
                     <option value="Biscuit" />
+                    <option value="Pearl" />
                     <option value="Black" />
-                    <option value="Dark Bronze" />
-                    <option value="Oil-Rubbed Bronze" />
-                    <option value="Chrome" />
-                    <option value="Brushed Nickel" />
-                    <option value="Polished Nickel" />
-                    <option value="Stainless Steel" />
-                    <option value="Gold" />
-                    <option value="Brushed Brass" />
-                    <option value="Polished Brass" />
                     <option value="Gray" />
                     <option value="Slate" />
                     <option value="Charcoal" />
+                    <option value="Graphite" />
+                    <option value="Silver" />
                     <option value="Beige" />
                     <option value="Tan" />
+                    <option value="Taupe" />
+                    <option value="Sand" />
                     <option value="Brown" />
+                    <option value="Mocha" />
                     <option value="Espresso" />
                     <option value="Walnut" />
                     <option value="Natural" />
+                    <option value="Blue" />
+                    <option value="Navy" />
+                    <option value="Red" />
+                    <option value="Green" />
+                    <option value="Sage" />
+                    <option value="Copper" />
                     <option value="Clear" />
+                  </datalist>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Finish
+                  </label>
+                  <input
+                    type="text"
+                    list="product-finishes"
+                    value={formData.finish}
+                    onChange={(e) =>
+                      setFormData({ ...formData, finish: e.target.value })
+                    }
+                    placeholder="e.g., Brushed Nickel, Matte Black"
+                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <datalist id="product-finishes">
+                    <option value="Aged Brass" />
+                    <option value="Black Stainless" />
+                    <option value="Brilliance Black Onyx" />
+                    <option value="Brilliance Brushed Nickel" />
+                    <option value="Brilliance Polished Gold" />
+                    <option value="Brilliance Polished Nickel" />
+                    <option value="Brilliance Stainless" />
+                    <option value="Bronzed Gold" />
+                    <option value="Brushed Bronze" />
+                    <option value="Brushed Gold" />
+                    <option value="Brushed Gold PVD" />
+                    <option value="Brushed Moderne Brass" />
+                    <option value="Brushed Nickel" />
+                    <option value="Brushed Nickel PVD" />
+                    <option value="Champagne Bronze" />
+                    <option value="Chrome" />
+                    <option value="Cocoa Bronze" />
+                    <option value="French Gold" />
+                    <option value="Gunmetal" />
+                    <option value="Luxe Nickel" />
+                    <option value="Luxe Steel" />
+                    <option value="Matte Black" />
+                    <option value="Matte White" />
+                    <option value="Oil-Rubbed Bronze" />
+                    <option value="Polished Brass" />
+                    <option value="Polished Brass PVD" />
+                    <option value="Polished Chrome" />
+                    <option value="Polished Nickel" />
+                    <option value="Polished Nickel PVD" />
+                    <option value="Satin Copper" />
+                    <option value="Spot Resist Stainless" />
+                    <option value="Stainless / Arctic Stainless" />
+                    <option value="Stainless Steel PVD" />
+                    <option value="Titanium" />
+                    <option value="Venetian Bronze" />
+                    <option value="Vibrant Stainless" />
                   </datalist>
                 </div>
                 <div className="col-span-2">
