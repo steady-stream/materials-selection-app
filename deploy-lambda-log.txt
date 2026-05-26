@@ -1,0 +1,7 @@
+[18:34:45] Starting Lambda deployment
+[18:34:47] AWS account: 634752426026
+[18:34:47] Packaging lambda...
+[18:48:31] Zip created: 40.92 MB
+[18:48:31] Uploading to Lambda...
+[18:48:51] Lambda result: [     "MaterialsSelection-API",     "2026-05-25T23:48:50.000+0000",     42904501 ]
+[18:48:51] Lambda deployment DONE

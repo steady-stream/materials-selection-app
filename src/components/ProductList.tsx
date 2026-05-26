@@ -1,3 +1,4 @@
+import axios from "axios";
 import { useEffect, useRef, useState } from "react";
 import {
     manufacturerService,
@@ -5,9 +6,223 @@ import {
     productVendorService,
     vendorService,
 } from "../services";
-import type { Manufacturer, Product, ProductVendor, Vendor } from "../types";
+import type {
+    Manufacturer,
+    Product,
+    ProductVariation,
+    ProductVariationInput,
+    ProductVendor,
+    Vendor,
+} from "../types";
 
 type FilterView = "all" | "vendor" | "manufacturer" | "category";
+
+type DuplicateProductWarning = {
+  code: "DUPLICATE_PRODUCT_WARNING";
+  message: string;
+  modelStem?: string;
+  duplicates?: Array<{ id: string; name: string; modelNumber?: string | null }>;
+};
+
+const createEmptyVariation = (): ProductVariationInput => ({
+  modelNumber: "",
+  color: "",
+  finish: "",
+  imageUrl: "",
+});
+
+type VariationImageMode = "url" | "upload";
+
+const normalizeVariation = (
+  variation: ProductVariationInput,
+): ProductVariationInput => ({
+  id: variation.id,
+  modelNumber: (variation.modelNumber || "").trim(),
+  color: (variation.color || "").trim(),
+  finish: (variation.finish || "").trim(),
+  imageUrl: (variation.imageUrl || "").trim(),
+});
+
+const normalizeTextForKey = (value?: string): string =>
+  (value || "").trim().toLowerCase().replace(/\s+/g, " ");
+
+const mapProductToVariationInputs = (
+  product?: Product,
+): ProductVariationInput[] => {
+  if (!product) return [createEmptyVariation()];
+
+  if (product.variations && product.variations.length > 0) {
+    return product.variations
+      .slice()
+      .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+      .map((variation) => ({
+        id: variation.id,
+        modelNumber: variation.modelNumber || "",
+        color: variation.color || "",
+        finish: variation.finish || "",
+        imageUrl: variation.imageUrl || "",
+      }));
+  }
+
+  return [
+    {
+      modelNumber: product.modelNumber || "",
+      color: product.color || "",
+      finish: product.finish || "",
+      imageUrl: product.imageUrl || "",
+    },
+  ];
+};
+
+const mapApiVariationsToInputs = (
+  variationList: ProductVariation[],
+): ProductVariationInput[] =>
+  (variationList || [])
+    .slice()
+    .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+    .map((variation) => ({
+      id: variation.id,
+      modelNumber: variation.modelNumber || "",
+      color: variation.color || "",
+      finish: variation.finish || "",
+      imageUrl: variation.imageUrl || "",
+    }));
+
+const validateVariations = (
+  variations: ProductVariationInput[],
+  baseModelNumber: string,
+): string | null => {
+  if (variations.length === 0) return "At least one variation is required";
+
+  if (variations.length > 1) {
+    const missingColorFinish = variations.find(
+      (variation) => !variation.color && !variation.finish,
+    );
+    if (missingColorFinish) {
+      return "When multiple variations exist, each variation needs color and/or finish";
+    }
+  }
+
+  const modelSet = new Set<string>();
+  const comboSet = new Set<string>();
+
+  for (const variation of variations) {
+    const effectiveModel = (variation.modelNumber || baseModelNumber)
+      .trim()
+      .toUpperCase();
+    if (effectiveModel) {
+      if (modelSet.has(effectiveModel)) {
+        return `Duplicate variation model number: ${effectiveModel}`;
+      }
+      modelSet.add(effectiveModel);
+    }
+
+    const comboKey = `${normalizeTextForKey(variation.color)}|${normalizeTextForKey(variation.finish)}`;
+    if (comboSet.has(comboKey)) {
+      return "Duplicate color/finish variation combination";
+    }
+    comboSet.add(comboKey);
+  }
+
+  return null;
+};
+
+const validateVariationsDetailed = (
+  variations: ProductVariationInput[],
+  baseModelNumber: string,
+): {
+  formError: string | null;
+  variationErrors: Record<number, string[]>;
+} => {
+  const variationErrors: Record<number, string[]> = {};
+  const pushError = (index: number, message: string) => {
+    if (!variationErrors[index]) variationErrors[index] = [];
+    variationErrors[index].push(message);
+  };
+
+  if (variations.length === 0) {
+    return {
+      formError: "At least one variation is required",
+      variationErrors,
+    };
+  }
+
+  if (variations.length > 1) {
+    variations.forEach((variation, index) => {
+      if (!variation.color && !variation.finish) {
+        pushError(index, "Color and/or finish is required for this variation.");
+      }
+    });
+  }
+
+  const modelToIndexes = new Map<string, number[]>();
+  const comboToIndexes = new Map<string, number[]>();
+
+  variations.forEach((variation, index) => {
+    const effectiveModel = (variation.modelNumber || baseModelNumber)
+      .trim()
+      .toUpperCase();
+    if (effectiveModel) {
+      const existing = modelToIndexes.get(effectiveModel) || [];
+      existing.push(index);
+      modelToIndexes.set(effectiveModel, existing);
+    }
+
+    const comboKey = `${normalizeTextForKey(variation.color)}|${normalizeTextForKey(variation.finish)}`;
+    const comboIndexes = comboToIndexes.get(comboKey) || [];
+    comboIndexes.push(index);
+    comboToIndexes.set(comboKey, comboIndexes);
+  });
+
+  for (const [model, indexes] of modelToIndexes.entries()) {
+    if (indexes.length > 1) {
+      indexes.forEach((index) => {
+        pushError(index, `Duplicate effective model number: ${model}`);
+      });
+    }
+  }
+
+  for (const [key, indexes] of comboToIndexes.entries()) {
+    if (indexes.length > 1 && key !== "|") {
+      indexes.forEach((index) => {
+        pushError(index, "Duplicate color/finish combination.");
+      });
+    }
+  }
+
+  return {
+    formError: Object.keys(variationErrors).length
+      ? "Please resolve variation errors below."
+      : null,
+    variationErrors,
+  };
+};
+
+const isDuplicateWarning = (
+  value: unknown,
+): value is DuplicateProductWarning => {
+  if (!value || typeof value !== "object") return false;
+  const payload = value as Partial<DuplicateProductWarning>;
+  return payload.code === "DUPLICATE_PRODUCT_WARNING";
+};
+
+const buildDuplicateWarningMessage = (
+  warning: DuplicateProductWarning,
+): string => {
+  const duplicates = warning.duplicates || [];
+  const duplicateLines = duplicates
+    .slice(0, 8)
+    .map(
+      (item) =>
+        `• ${item.name}${item.modelNumber ? ` (${item.modelNumber})` : ""}`,
+    )
+    .join("\n");
+
+  const header = warning.message || "Possible duplicate product found.";
+  const stem = warning.modelStem ? `\nModel stem: ${warning.modelStem}` : "";
+  const list = duplicateLines ? `\n\nMatches:\n${duplicateLines}` : "";
+  return `${header}${stem}${list}\n\nContinue and save anyway?`;
+};
 
 const ProductList = () => {
   const [products, setProducts] = useState<Product[]>([]);
@@ -28,7 +243,14 @@ const ProductList = () => {
   });
   const [colorFilter, setColorFilter] = useState<string>("");
   const [finishFilter, setFinishFilter] = useState<string>("");
+  const [expandedProducts, setExpandedProducts] = useState<Set<string>>(
+    new Set(),
+  );
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
+  const [variationValidationErrors, setVariationValidationErrors] = useState<
+    Record<number, string[]>
+  >({});
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
   const [isVendorModalOpen, setIsVendorModalOpen] = useState(false);
@@ -59,12 +281,21 @@ const ProductList = () => {
   const [quickAddMfrName, setQuickAddMfrName] = useState("");
   const [quickAddMfrSaving, setQuickAddMfrSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const imageFileInputRef = useRef<HTMLInputElement>(null);
-  const [imageInputMode, setImageInputMode] = useState<"url" | "upload">("url");
-  const [imageUploadStatus, setImageUploadStatus] = useState<
-    "idle" | "uploading" | "done" | "error"
-  >("idle");
-  const [imageUploadError, setImageUploadError] = useState<string>("");
+  const variationImageFileInputRefs = useRef<
+    Record<number, HTMLInputElement | null>
+  >({});
+  const [variationImageModes, setVariationImageModes] = useState<
+    Record<number, VariationImageMode>
+  >({ 0: "url" });
+  const [variationUploadStatuses, setVariationUploadStatuses] = useState<
+    Record<number, "idle" | "uploading" | "done" | "error">
+  >({ 0: "idle" });
+  const [variationUploadErrors, setVariationUploadErrors] = useState<
+    Record<number, string>
+  >({ 0: "" });
+  const [variations, setVariations] = useState<ProductVariationInput[]>([
+    createEmptyVariation(),
+  ]);
 
   const [formData, setFormData] = useState({
     manufacturerId: "",
@@ -75,9 +306,6 @@ const ProductList = () => {
     unit: "ea",
     tier: "" as "" | "good" | "better" | "best",
     collection: "",
-    color: "",
-    finish: "",
-    imageUrl: "",
     productUrl: "",
   });
   const [primaryVendorId, setPrimaryVendorId] = useState("");
@@ -124,7 +352,39 @@ const ProductList = () => {
     }
   };
 
-  const handleOpenModal = (product?: Product) => {
+  const syncVariationEditorState = (
+    variationInputs: ProductVariationInput[],
+  ) => {
+    setVariationImageModes(
+      Object.fromEntries(
+        variationInputs.map((variation, index) => [
+          index,
+          (variation.imageUrl || "").includes("materials-product-images-")
+            ? "upload"
+            : "url",
+        ]),
+      ),
+    );
+    setVariationUploadStatuses(
+      Object.fromEntries(
+        variationInputs.map((variation, index) => [
+          index,
+          (variation.imageUrl || "").includes("materials-product-images-")
+            ? "done"
+            : "idle",
+        ]),
+      ),
+    );
+    setVariationUploadErrors(
+      Object.fromEntries(variationInputs.map((_, index) => [index, ""])),
+    );
+  };
+
+  const handleOpenModal = async (product?: Product) => {
+    const variationInputs = mapProductToVariationInputs(product);
+    setModalError(null);
+    setVariationValidationErrors({});
+
     if (product) {
       setEditingProduct(product);
       setFormData({
@@ -136,14 +396,28 @@ const ProductList = () => {
         unit: product.unit || "ea",
         tier: (product.tier || "") as "" | "good" | "better" | "best",
         collection: product.collection || "",
-        color: product.color || "",
-        finish: product.finish || "",
-        imageUrl: product.imageUrl || "",
         productUrl: product.productUrl || "",
       });
       setPrimaryVendorId("");
       setPrimaryVendorSku("");
       setPrimaryVendorCost("");
+      let editorVariations = variationInputs;
+
+      // Pull canonical variations from API so edit modal reflects latest persisted rows.
+      try {
+        const latestVariations = await productService.getVariations(product.id);
+        if (latestVariations.length > 0) {
+          editorVariations = mapApiVariationsToInputs(latestVariations);
+        }
+      } catch (variationLoadError) {
+        console.warn(
+          "Failed to refresh product variations for edit modal",
+          variationLoadError,
+        );
+      }
+
+      setVariations(editorVariations);
+      syncVariationEditorState(editorVariations);
     } else {
       setEditingProduct(null);
       setFormData({
@@ -155,29 +429,22 @@ const ProductList = () => {
         unit: "ea",
         tier: "" as "" | "good" | "better" | "best",
         collection: "",
-        color: "",
-        finish: "",
-        imageUrl: "",
         productUrl: "",
       });
       setPrimaryVendorId("");
       setPrimaryVendorSku("");
       setPrimaryVendorCost("");
+      setVariations(variationInputs);
+      syncVariationEditorState(variationInputs);
     }
-    // Auto-select upload mode if the existing imageUrl is from our S3 images bucket
-    const existingUrl = product?.imageUrl || "";
-    setImageInputMode(
-      existingUrl.includes("materials-product-images-") ? "upload" : "url",
-    );
-    setImageUploadStatus(
-      existingUrl.includes("materials-product-images-") ? "done" : "idle",
-    );
-    setImageUploadError("");
+
     setIsModalOpen(true);
   };
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
+    setModalError(null);
+    setVariationValidationErrors({});
     setEditingProduct(null);
     setShowQuickAddMfr(false);
     setQuickAddMfrName("");
@@ -190,21 +457,22 @@ const ProductList = () => {
       unit: "ea",
       tier: "" as "" | "good" | "better" | "best",
       collection: "",
-      color: "",
-      finish: "",
-      imageUrl: "",
       productUrl: "",
     });
     setPrimaryVendorId("");
     setPrimaryVendorSku("");
     setPrimaryVendorCost("");
-    setImageInputMode("url");
-    setImageUploadStatus("idle");
-    setImageUploadError("");
+    setVariationImageModes({ 0: "url" });
+    setVariationUploadStatuses({ 0: "idle" });
+    setVariationUploadErrors({ 0: "" });
+    setVariations([createEmptyVariation()]);
   };
 
   // Clone opens the Add modal pre-populated with the source product's fields
   const handleClone = (product: Product) => {
+    const variationInputs = mapProductToVariationInputs(product);
+    setModalError(null);
+    setVariationValidationErrors({});
     setEditingProduct(null);
     setFormData({
       manufacturerId: product.manufacturerId || "",
@@ -215,18 +483,85 @@ const ProductList = () => {
       unit: product.unit || "ea",
       tier: (product.tier || "") as "" | "good" | "better" | "best",
       collection: product.collection || "",
-      color: product.color || "",
-      finish: product.finish || "",
-      imageUrl: product.imageUrl || "",
       productUrl: product.productUrl || "",
     });
     setPrimaryVendorId("");
     setPrimaryVendorSku("");
     setPrimaryVendorCost("");
+    setVariations(variationInputs);
+    syncVariationEditorState(variationInputs);
     setIsModalOpen(true);
   };
 
+  const handleAddVariation = () => {
+    setVariationValidationErrors({});
+    setVariations((prev) => {
+      const nextIndex = prev.length;
+      setVariationImageModes((current) => ({ ...current, [nextIndex]: "url" }));
+      setVariationUploadStatuses((current) => ({
+        ...current,
+        [nextIndex]: "idle",
+      }));
+      setVariationUploadErrors((current) => ({ ...current, [nextIndex]: "" }));
+      return [...prev, createEmptyVariation()];
+    });
+  };
+
+  const handleRemoveVariation = (index: number) => {
+    setVariationValidationErrors({});
+    setVariations((prev) => {
+      if (prev.length <= 1) return prev;
+      const next = prev.filter((_, i) => i !== index);
+      setVariationImageModes(
+        Object.fromEntries(
+          next.map((_, nextIndex) => [
+            nextIndex,
+            variationImageModes[
+              nextIndex >= index ? nextIndex + 1 : nextIndex
+            ] || "url",
+          ]),
+        ),
+      );
+      setVariationUploadStatuses(
+        Object.fromEntries(
+          next.map((_, nextIndex) => [
+            nextIndex,
+            variationUploadStatuses[
+              nextIndex >= index ? nextIndex + 1 : nextIndex
+            ] || "idle",
+          ]),
+        ),
+      );
+      setVariationUploadErrors(
+        Object.fromEntries(
+          next.map((_, nextIndex) => [
+            nextIndex,
+            variationUploadErrors[
+              nextIndex >= index ? nextIndex + 1 : nextIndex
+            ] || "",
+          ]),
+        ),
+      );
+      return next;
+    });
+  };
+
+  const handleVariationChange = (
+    index: number,
+    field: keyof ProductVariationInput,
+    value: string,
+  ) => {
+    setVariationValidationErrors({});
+    setVariations((prev) => {
+      const next = prev.map((variation, i) =>
+        i === index ? { ...variation, [field]: value } : variation,
+      );
+      return next;
+    });
+  };
+
   const handleImageFileSelect = async (
+    variationIndex: number,
     e: React.ChangeEvent<HTMLInputElement>,
   ) => {
     const file = e.target.files?.[0];
@@ -234,18 +569,30 @@ const ProductList = () => {
 
     // Client-side size guard — reject before requesting presigned URL
     if (file.size > 5 * 1024 * 1024) {
-      setImageUploadError("Image must be 5 MB or smaller.");
+      setVariationUploadErrors((current) => ({
+        ...current,
+        [variationIndex]: "Image must be 5 MB or smaller.",
+      }));
       return;
     }
 
     const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
     if (!allowedTypes.includes(file.type)) {
-      setImageUploadError("Allowed formats: JPEG, PNG, WebP, GIF.");
+      setVariationUploadErrors((current) => ({
+        ...current,
+        [variationIndex]: "Allowed formats: JPEG, PNG, WebP, GIF.",
+      }));
       return;
     }
 
-    setImageUploadStatus("uploading");
-    setImageUploadError("");
+    setVariationUploadStatuses((current) => ({
+      ...current,
+      [variationIndex]: "uploading",
+    }));
+    setVariationUploadErrors((current) => ({
+      ...current,
+      [variationIndex]: "",
+    }));
 
     try {
       // Step 1 — get presigned URL from Lambda
@@ -269,59 +616,139 @@ const ProductList = () => {
       if (!uploadRes.ok)
         throw new Error(`S3 upload failed (${uploadRes.status})`);
 
-      // Step 3 — store the permanent public URL in formData
-      setFormData((prev) => ({ ...prev, imageUrl }));
-      setImageUploadStatus("done");
+      setVariations((prev) => {
+        const next = prev.length > 0 ? [...prev] : [createEmptyVariation()];
+        next[variationIndex] = { ...next[variationIndex], imageUrl };
+        return next;
+      });
+      setVariationUploadStatuses((current) => ({
+        ...current,
+        [variationIndex]: "done",
+      }));
     } catch (err) {
       console.error("Image upload failed:", err);
-      setImageUploadError(
-        err instanceof Error ? err.message : "Upload failed. Please try again.",
-      );
-      setImageUploadStatus("error");
+      setVariationUploadErrors((current) => ({
+        ...current,
+        [variationIndex]:
+          err instanceof Error
+            ? err.message
+            : "Upload failed. Please try again.",
+      }));
+      setVariationUploadStatuses((current) => ({
+        ...current,
+        [variationIndex]: "error",
+      }));
     }
 
-    // Reset the file input so the same file can be re-selected after an error
-    if (imageFileInputRef.current) imageFileInputRef.current.value = "";
+    if (variationImageFileInputRefs.current[variationIndex]) {
+      variationImageFileInputRefs.current[variationIndex]!.value = "";
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setModalError(null);
+    setVariationValidationErrors({});
+
     const primaryVendorCostValue = primaryVendorId
       ? primaryVendorCost.trim() === ""
         ? 0
         : parseFloat(primaryVendorCost)
       : null;
     if (primaryVendorId && Number.isNaN(primaryVendorCostValue)) {
-      setError("Primary vendor cost must be a valid number");
+      setModalError("Primary vendor cost must be a valid number");
       return;
     }
-    try {
-      // Convert empty string tier to undefined for API compatibility
-      const submitData = {
-        ...formData,
-        tier: formData.tier === "" ? undefined : formData.tier,
-      };
 
+    const baseModelNumber = formData.modelNumber.trim();
+    const normalizedVariations = variations.map((variation) =>
+      normalizeVariation(variation),
+    );
+    const variationError = validateVariations(
+      normalizedVariations,
+      baseModelNumber,
+    );
+    if (variationError) {
+      const detailedValidation = validateVariationsDetailed(
+        normalizedVariations,
+        baseModelNumber,
+      );
+      setVariationValidationErrors(detailedValidation.variationErrors);
+      setModalError(detailedValidation.formError || variationError);
+      return;
+    }
+
+    const submitData: {
+      manufacturerId: string;
+      name: string;
+      modelNumber: string;
+      description: string;
+      category: string;
+      unit: string;
+      tier?: "good" | "better" | "best";
+      collection: string;
+      productUrl: string;
+      variations: ProductVariationInput[];
+      overrideDuplicate?: boolean;
+    } = {
+      ...formData,
+      modelNumber: baseModelNumber,
+      variations: normalizedVariations,
+      // Convert empty string tier to undefined for API compatibility
+      tier: formData.tier === "" ? undefined : formData.tier,
+    };
+
+    const saveWithPayload = async (
+      payload: typeof submitData,
+    ): Promise<Product> => {
       if (editingProduct) {
-        const updated = await productService.updateProduct(
-          editingProduct.id,
-          submitData,
+        return await productService.updateProduct(editingProduct.id, payload);
+      }
+      return await productService.createProduct(payload);
+    };
+
+    const attemptSave = async (
+      payload: typeof submitData,
+    ): Promise<Product> => {
+      try {
+        return await saveWithPayload(payload);
+      } catch (err) {
+        if (axios.isAxiosError(err) && err.response?.status === 409) {
+          const warning = err.response.data as unknown;
+          if (isDuplicateWarning(warning)) {
+            const proceed = confirm(buildDuplicateWarningMessage(warning));
+            if (proceed) {
+              return await saveWithPayload({
+                ...payload,
+                overrideDuplicate: true,
+              });
+            }
+            throw new Error("Duplicate warning not overridden");
+          }
+        }
+        throw err;
+      }
+    };
+
+    try {
+      const savedProduct = await attemptSave(submitData);
+      if (editingProduct) {
+        setProducts(
+          products.map((p) => (p.id === savedProduct.id ? savedProduct : p)),
         );
-        setProducts(products.map((p) => (p.id === updated.id ? updated : p)));
       } else {
-        const created = await productService.createProduct(submitData);
-        setProducts([...products, created]);
+        setProducts([...products, savedProduct]);
         if (primaryVendorId) {
           try {
             const createdVendor = await productVendorService.create({
-              productId: created.id,
+              productId: savedProduct.id,
               vendorId: primaryVendorId,
               cost: primaryVendorCostValue ?? 0,
               sku: primaryVendorSku.trim() || undefined,
               isPrimary: true,
             });
             setAllProductVendors(
-              new Map(allProductVendors).set(created.id, [createdVendor]),
+              new Map(allProductVendors).set(savedProduct.id, [createdVendor]),
             );
           } catch (vendorError) {
             setError(
@@ -333,7 +760,13 @@ const ProductList = () => {
       }
       handleCloseModal();
     } catch (err) {
-      setError("Failed to save product");
+      if (
+        err instanceof Error &&
+        err.message === "Duplicate warning not overridden"
+      ) {
+        return;
+      }
+      setModalError("Failed to save product");
       console.error("Error saving product:", err);
     }
   };
@@ -617,7 +1050,7 @@ const ProductList = () => {
         </div>
       </div>
 
-      {error && (
+      {error && !isModalOpen && (
         <div className="mt-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
           {error}
         </div>
@@ -862,6 +1295,9 @@ const ProductList = () => {
                 const manufacturer = manufacturers.find(
                   (m) => m.id === product.manufacturerId,
                 );
+                const variationCount = product.variations?.length || 0;
+                const hasMultipleVariations = variationCount > 1;
+                const isExpanded = expandedProducts.has(product.id);
                 const productVendorList =
                   allProductVendors.get(product.id) || [];
                 const primaryVendor =
@@ -907,7 +1343,65 @@ const ProductList = () => {
                       }}
                       onMouseLeave={() => setHoverProduct(null)}
                     >
-                      {product.modelNumber || "-"}
+                      <div className="flex items-center gap-2">
+                        <span>{product.modelNumber || "-"}</span>
+                        {hasMultipleVariations && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setExpandedProducts((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(product.id)) {
+                                    next.delete(product.id);
+                                  } else {
+                                    next.add(product.id);
+                                  }
+                                  return next;
+                                });
+                              }}
+                              className="rounded border border-gray-300 px-1 py-0 text-[10px] text-gray-700 hover:bg-gray-100"
+                              title={
+                                isExpanded
+                                  ? "Hide variation models"
+                                  : "Show variation models"
+                              }
+                            >
+                              {isExpanded ? "▾" : "▸"}
+                            </button>
+                            <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
+                              {variationCount} vars
+                            </span>
+                          </>
+                        )}
+                      </div>
+                      {hasMultipleVariations && isExpanded && (
+                        <div className="mt-1 space-y-0.5 text-[10px] text-gray-600">
+                          {product.variations?.map((variation, index) => {
+                            const effectiveModel =
+                              variation.effectiveModelNumber ||
+                              variation.modelNumber ||
+                              product.modelNumber ||
+                              "-";
+                            const colorFinish = [variation.color, variation.finish]
+                              .filter(Boolean)
+                              .join(" / ");
+                            return (
+                              <div
+                                key={variation.id || `${product.id}-variation-${index}`}
+                                className="flex items-start gap-1"
+                              >
+                                <span className="text-gray-400">{index + 1}.</span>
+                                <span>
+                                  {effectiveModel}
+                                  {colorFinish ? ` - ${colorFinish}` : ""}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </td>
                     <td className="px-2 py-1 text-gray-900">
                       {manufacturer?.name || "-"}
@@ -1217,6 +1711,11 @@ const ProductList = () => {
             <h2 className="text-sm font-semibold text-gray-900 mb-3">
               {editingProduct ? "Edit Product" : "Add New Product"}
             </h2>
+            {modalError && (
+              <div className="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                {modalError}
+              </div>
+            )}
             <form onSubmit={handleSubmit} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div className="col-span-2">
@@ -1468,20 +1967,299 @@ const ProductList = () => {
                     className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
-                <div>
+                <div className="col-span-2">
                   <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Color
+                    Description (populates Material field on line items)
                   </label>
-                  <input
-                    type="text"
-                    list="product-colors"
-                    value={formData.color}
+                  <textarea
+                    value={formData.description}
                     onChange={(e) =>
-                      setFormData({ ...formData, color: e.target.value })
+                      setFormData({ ...formData, description: e.target.value })
                     }
-                    placeholder="e.g., White, Gray, Beige"
+                    rows={3}
                     className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
                   />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Product URL
+                  </label>
+                  <input
+                    type="url"
+                    value={formData.productUrl}
+                    onChange={(e) =>
+                      setFormData({ ...formData, productUrl: e.target.value })
+                    }
+                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div className="col-span-2 rounded-lg border border-slate-300 bg-slate-100 p-3 shadow-sm">
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <div className="text-xs font-semibold text-gray-700">
+                        Variations
+                      </div>
+                      <div className="text-[11px] text-gray-500">
+                        Add per-product variations for color, finish, and model
+                        overrides.
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddVariation}
+                      className="px-2 py-1 text-xs bg-indigo-50 text-indigo-700 border border-indigo-300 rounded-md hover:bg-indigo-100"
+                    >
+                      + Add Variation
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {variations.map((variation, index) => (
+                      <div
+                        key={variation.id || `variation-${index}`}
+                        className="rounded-md border border-slate-200 bg-white/85 p-3"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="text-[11px] font-semibold text-gray-700">
+                            Variation {index + 1}
+                            {index === 0 ? " (default)" : ""}
+                          </div>
+                          {variations.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveVariation(index)}
+                              className="text-[11px] text-red-600 hover:text-red-800"
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="col-span-2">
+                            <label className="block text-[11px] font-medium text-gray-700 mb-1">
+                              Model Override
+                            </label>
+                            <input
+                              type="text"
+                              value={variation.modelNumber || ""}
+                              onChange={(e) =>
+                                handleVariationChange(
+                                  index,
+                                  "modelNumber",
+                                  e.target.value,
+                                )
+                              }
+                              placeholder={
+                                index === 0
+                                  ? "Optional, inherits base model if blank"
+                                  : "Optional, inherits base model if blank"
+                              }
+                              className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-medium text-gray-700 mb-1">
+                              Color
+                            </label>
+                            <input
+                              type="text"
+                              list="product-colors"
+                              value={variation.color || ""}
+                              onChange={(e) =>
+                                handleVariationChange(
+                                  index,
+                                  "color",
+                                  e.target.value,
+                                )
+                              }
+                              className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-medium text-gray-700 mb-1">
+                              Finish
+                            </label>
+                            <input
+                              type="text"
+                              list="product-finishes"
+                              value={variation.finish || ""}
+                              onChange={(e) =>
+                                handleVariationChange(
+                                  index,
+                                  "finish",
+                                  e.target.value,
+                                )
+                              }
+                              className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                            />
+                          </div>
+                        </div>
+                        <div className="mt-3 rounded-md border border-slate-300 bg-slate-100/80 p-2">
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="block text-[11px] font-medium text-gray-700">
+                              Variation Image
+                            </label>
+                            <div className="flex overflow-hidden rounded border border-gray-300 text-[11px]">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setVariationImageModes((current) => ({
+                                    ...current,
+                                    [index]: "url",
+                                  }));
+                                  setVariationUploadStatuses((current) => ({
+                                    ...current,
+                                    [index]: "idle",
+                                  }));
+                                  setVariationUploadErrors((current) => ({
+                                    ...current,
+                                    [index]: "",
+                                  }));
+                                }}
+                                className={`px-2 py-0.5 ${variationImageModes[index] === "url" ? "bg-indigo-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+                              >
+                                URL
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setVariationImageModes((current) => ({
+                                    ...current,
+                                    [index]: "upload",
+                                  }));
+                                  setVariationUploadErrors((current) => ({
+                                    ...current,
+                                    [index]: "",
+                                  }));
+                                }}
+                                className={`px-2 py-0.5 ${variationImageModes[index] === "upload" ? "bg-indigo-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+                              >
+                                Upload
+                              </button>
+                            </div>
+                          </div>
+
+                          {variation.imageUrl && (
+                            <div className="mb-2 flex items-center gap-2">
+                              <img
+                                src={variation.imageUrl}
+                                alt={`Variation ${index + 1}`}
+                                className="h-16 w-16 object-contain rounded border border-gray-200 bg-white"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.display =
+                                    "none";
+                                }}
+                              />
+                              <div className="flex flex-col gap-1">
+                                <span className="max-w-xs truncate break-all text-[11px] text-gray-500">
+                                  {variation.imageUrl}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleVariationChange(
+                                      index,
+                                      "imageUrl",
+                                      "",
+                                    );
+                                    setVariationUploadStatuses((current) => ({
+                                      ...current,
+                                      [index]: "idle",
+                                    }));
+                                    setVariationUploadErrors((current) => ({
+                                      ...current,
+                                      [index]: "",
+                                    }));
+                                  }}
+                                  className="text-left text-[11px] text-red-600 hover:text-red-800"
+                                >
+                                  × Remove image
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {variationImageModes[index] === "url" && (
+                            <input
+                              type="url"
+                              placeholder="https://..."
+                              value={variation.imageUrl || ""}
+                              onChange={(e) =>
+                                handleVariationChange(
+                                  index,
+                                  "imageUrl",
+                                  e.target.value,
+                                )
+                              }
+                              className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                            />
+                          )}
+
+                          {variationImageModes[index] === "upload" && (
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    variationImageFileInputRefs.current[
+                                      index
+                                    ]?.click()
+                                  }
+                                  disabled={
+                                    variationUploadStatuses[index] ===
+                                    "uploading"
+                                  }
+                                  className="px-3 py-1 text-xs bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+                                >
+                                  {variationUploadStatuses[index] ===
+                                  "uploading"
+                                    ? "Uploading…"
+                                    : variation.imageUrl
+                                      ? "Replace image"
+                                      : "Choose file"}
+                                </button>
+                                {variationUploadStatuses[index] ===
+                                  "uploading" && (
+                                  <span className="text-[11px] text-gray-500">
+                                    Uploading…
+                                  </span>
+                                )}
+                                {variationUploadStatuses[index] === "done" && (
+                                  <span className="text-[11px] text-green-600">
+                                    ✓ Uploaded
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-gray-400">
+                                JPEG, PNG, WebP or GIF · max 5 MB
+                              </p>
+                              <input
+                                ref={(element) => {
+                                  variationImageFileInputRefs.current[index] =
+                                    element;
+                                }}
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp,image/gif"
+                                className="hidden"
+                                onChange={(e) =>
+                                  handleImageFileSelect(index, e)
+                                }
+                              />
+                              {variationUploadErrors[index] && (
+                                <p className="text-[11px] text-red-600">
+                                  {variationUploadErrors[index]}
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        {variationValidationErrors[index]?.length > 0 && (
+                          <div className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1 text-[11px] text-red-700">
+                            {variationValidationErrors[index].join(" ")}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                   <datalist id="product-colors">
                     <option value="White" />
                     <option value="Off-White" />
@@ -1514,21 +2292,6 @@ const ProductList = () => {
                     <option value="Copper" />
                     <option value="Clear" />
                   </datalist>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Finish
-                  </label>
-                  <input
-                    type="text"
-                    list="product-finishes"
-                    value={formData.finish}
-                    onChange={(e) =>
-                      setFormData({ ...formData, finish: e.target.value })
-                    }
-                    placeholder="e.g., Brushed Nickel, Matte Black"
-                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
-                  />
                   <datalist id="product-finishes">
                     <option value="Aged Brass" />
                     <option value="Black Stainless" />
@@ -1568,155 +2331,9 @@ const ProductList = () => {
                     <option value="Vibrant Stainless" />
                   </datalist>
                 </div>
-                <div className="col-span-2">
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Description (populates Material field on line items)
-                  </label>
-                  <textarea
-                    value={formData.description}
-                    onChange={(e) =>
-                      setFormData({ ...formData, description: e.target.value })
-                    }
-                    rows={3}
-                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div className="col-span-2">
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Product URL
-                  </label>
-                  <input
-                    type="url"
-                    value={formData.productUrl}
-                    onChange={(e) =>
-                      setFormData({ ...formData, productUrl: e.target.value })
-                    }
-                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div className="col-span-2">
-                  {/* ── Image section — URL or file upload, user can switch at any time ── */}
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-medium text-gray-700">
-                      Product Image
-                    </label>
-                    {/* Mode toggle */}
-                    <div className="flex rounded border border-gray-300 overflow-hidden text-[11px]">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setImageInputMode("url");
-                          setImageUploadStatus("idle");
-                          setImageUploadError("");
-                        }}
-                        className={`px-2 py-0.5 ${imageInputMode === "url" ? "bg-indigo-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
-                      >
-                        URL
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setImageInputMode("upload");
-                          setImageUploadError("");
-                        }}
-                        className={`px-2 py-0.5 ${imageInputMode === "upload" ? "bg-indigo-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
-                      >
-                        Upload
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Thumbnail — shown whenever an imageUrl exists regardless of mode */}
-                  {formData.imageUrl && (
-                    <div className="mb-2 flex items-center gap-2">
-                      <img
-                        src={formData.imageUrl}
-                        alt="Product"
-                        className="h-16 w-16 object-contain border border-gray-200 rounded bg-gray-50"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = "none";
-                        }}
-                      />
-                      <div className="flex flex-col gap-1">
-                        <span className="text-[11px] text-gray-500 break-all max-w-xs truncate">
-                          {formData.imageUrl}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setFormData({ ...formData, imageUrl: "" });
-                            setImageUploadStatus("idle");
-                            setImageUploadError("");
-                          }}
-                          className="text-[11px] text-red-600 hover:text-red-800 text-left"
-                        >
-                          × Remove image
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* URL mode */}
-                  {imageInputMode === "url" && (
-                    <input
-                      type="url"
-                      placeholder="https://..."
-                      value={formData.imageUrl}
-                      onChange={(e) =>
-                        setFormData({ ...formData, imageUrl: e.target.value })
-                      }
-                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
-                    />
-                  )}
-
-                  {/* Upload mode */}
-                  {imageInputMode === "upload" && (
-                    <div className="flex flex-col gap-1">
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => imageFileInputRef.current?.click()}
-                          disabled={imageUploadStatus === "uploading"}
-                          className="px-3 py-1 text-xs bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
-                        >
-                          {imageUploadStatus === "uploading"
-                            ? "Uploading…"
-                            : formData.imageUrl
-                              ? "Replace image"
-                              : "Choose file"}
-                        </button>
-                        {imageUploadStatus === "uploading" && (
-                          <span className="text-[11px] text-gray-500">
-                            Uploading…
-                          </span>
-                        )}
-                        {imageUploadStatus === "done" && (
-                          <span className="text-[11px] text-green-600">
-                            ✓ Uploaded
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-gray-400">
-                        JPEG, PNG, WebP or GIF · max 5 MB
-                      </p>
-                      <input
-                        ref={imageFileInputRef}
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp,image/gif"
-                        className="hidden"
-                        onChange={handleImageFileSelect}
-                      />
-                      {imageUploadError && (
-                        <p className="text-[11px] text-red-600">
-                          {imageUploadError}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
                 {!editingProduct && (
                   <>
-                    <div className="col-span-2 border-t pt-3">
+                    <div className="col-span-2 rounded-lg border border-amber-200 bg-amber-50/70 p-3">
                       <div className="text-xs font-semibold text-gray-700">
                         Primary Vendor (optional)
                       </div>
@@ -1724,57 +2341,63 @@ const ProductList = () => {
                         If selected, a Product Vendor relationship will be
                         created as PRIMARY.
                       </div>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Primary Vendor
-                      </label>
-                      <select
-                        value={primaryVendorId}
-                        onChange={(e) => setPrimaryVendorId(e.target.value)}
-                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
-                      >
-                        <option value="">Select Vendor...</option>
-                        {vendors.map((v) => (
-                          <option key={v.id} value={v.id}>
-                            {v.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Vendor SKU
-                      </label>
-                      <input
-                        type="text"
-                        value={primaryVendorSku}
-                        onChange={(e) => setPrimaryVendorSku(e.target.value)}
-                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Vendor Cost
-                      </label>
-                      <div className="flex items-center gap-1">
-                        <span className="text-xs text-gray-600">$</span>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={primaryVendorCost}
-                          onChange={(e) => setPrimaryVendorCost(e.target.value)}
-                          className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
-                        />
-                        <span className="text-xs text-gray-600">
-                          / {formData.unit || "ea"}
-                        </span>
+                      <div className="mt-3 grid grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Primary Vendor
+                          </label>
+                          <select
+                            value={primaryVendorId}
+                            onChange={(e) => setPrimaryVendorId(e.target.value)}
+                            className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                          >
+                            <option value="">Select Vendor...</option>
+                            {vendors.map((v) => (
+                              <option key={v.id} value={v.id}>
+                                {v.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Vendor SKU
+                          </label>
+                          <input
+                            type="text"
+                            value={primaryVendorSku}
+                            onChange={(e) =>
+                              setPrimaryVendorSku(e.target.value)
+                            }
+                            className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Vendor Cost
+                          </label>
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-gray-600">$</span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={primaryVendorCost}
+                              onChange={(e) =>
+                                setPrimaryVendorCost(e.target.value)
+                              }
+                              className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                            />
+                            <span className="text-xs text-gray-600">
+                              / {formData.unit || "ea"}
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </>
                 )}
                 {editingProduct && (
-                  <div className="col-span-2 border-t pt-3 flex items-center justify-between">
+                  <div className="col-span-2 flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50/70 p-3">
                     <div>
                       <div className="text-xs font-semibold text-gray-700">
                         Vendor Pricing

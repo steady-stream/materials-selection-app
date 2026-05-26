@@ -1,6 +1,7 @@
 import type {
     CreateProductRequest,
     Product,
+    ProductVariation,
     UpdateProductRequest,
 } from "../types";
 import api from "./api";
@@ -20,6 +21,13 @@ export const productService = {
 
   async getProduct(id: string): Promise<Product> {
     const response = await api.get<Product>(`/products/${id}`);
+    return response.data;
+  },
+
+  async getVariations(productId: string): Promise<ProductVariation[]> {
+    const response = await api.get<ProductVariation[]>(
+      `/products/${productId}/variations`,
+    );
     return response.data;
   },
 

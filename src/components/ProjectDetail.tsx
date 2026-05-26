@@ -149,6 +149,9 @@ const ProjectDetail = () => {
   const [filterCollection, setFilterCollection] = useState<string>("");
   const [filterColor, setFilterColor] = useState<string>("");
   const [filterFinish, setFilterFinish] = useState<string>("");
+  const [expandedInsertProducts, setExpandedInsertProducts] = useState<
+    Set<string>
+  >(new Set());
   const [hoverInsertProduct, setHoverInsertProduct] = useState<string | null>(
     null,
   );
@@ -211,6 +214,14 @@ const ProjectDetail = () => {
   const [allLineItemOptions, setAllLineItemOptions] = useState<
     LineItemOption[]
   >([]);
+  const [draggingLineItemId, setDraggingLineItemId] = useState<string | null>(
+    null,
+  );
+  const [dragOverTarget, setDragOverTarget] = useState<{
+    categoryId: string;
+    lineItemId?: string;
+  } | null>(null);
+  const [isResequencing, setIsResequencing] = useState(false);
 
   // SharePoint link-folder modal state
   const [showSpLinkModal, setShowSpLinkModal] = useState(false);
@@ -475,7 +486,7 @@ const ProjectDetail = () => {
         categoryId,
         projectId: id!,
       });
-      setLineItems([...lineItems, created]);
+      setLineItems((prev) => [...prev, created]);
       setShowAddRow(null);
       setNewItem({
         categoryId: "",
@@ -684,12 +695,12 @@ const ProjectDetail = () => {
           (pv: ProductVendor) =>
             pv.productId === productId && pv.vendorId === selectedVendorId,
         );
-        cost = vendorCost?.cost || 0;
+        cost = applyVendorTaxRate(vendorCost?.cost || 0, selectedVendorId);
       } else if (productVendorList.length >= 1) {
         const primaryVendor =
           productVendorList.find((pv) => pv.isPrimary) || productVendorList[0];
         selectedVendorId = primaryVendor.vendorId;
-        cost = primaryVendor.cost;
+        cost = applyVendorTaxRate(primaryVendor.cost, selectedVendorId);
       } else {
         selectedVendorId = undefined;
         cost = 0;
@@ -991,13 +1002,13 @@ const ProjectDetail = () => {
           (pv: ProductVendor) =>
             pv.productId === productId && pv.vendorId === selectedVendorId,
         );
-        cost = vendorCost?.cost || 0;
+        cost = applyVendorTaxRate(vendorCost?.cost || 0, selectedVendorId);
       } else if (productVendorList.length >= 1) {
         // 1 or more vendors - auto-select primary vendor
         const primaryVendor =
           productVendorList.find((pv) => pv.isPrimary) || productVendorList[0];
         selectedVendorId = primaryVendor.vendorId;
-        cost = primaryVendor.cost;
+        cost = applyVendorTaxRate(primaryVendor.cost, selectedVendorId);
       } else {
         // No vendors - leave empty
         selectedVendorId = undefined;
@@ -1038,6 +1049,13 @@ const ProjectDetail = () => {
         product.id,
       );
 
+      const baseUnitCost = primaryVendor?.cost || 0;
+      const taxedUnitCost = applyVendorTaxRate(
+        baseUnitCost,
+        primaryVendor?.vendorId,
+      );
+      const finalUnitCost = insertUnitCost > 0 ? insertUnitCost : taxedUnitCost;
+
       const updatedItem = {
         ...selectingForLineItem,
         productId: product.id,
@@ -1046,8 +1064,7 @@ const ProjectDetail = () => {
         material: product.description || "",
         unit: product.unit || "",
         vendorId: primaryVendor?.vendorId,
-        unitCost:
-          insertUnitCost > 0 ? insertUnitCost : primaryVendor?.cost || 0,
+        unitCost: finalUnitCost,
         quantity: insertQuantity,
         status: "selected" as const,
       };
@@ -1060,8 +1077,7 @@ const ProjectDetail = () => {
       // Sync to LineItemOptions
       await lineItemOptionService.selectOption(selectingForLineItem.id, {
         productId: product.id,
-        unitCost:
-          insertUnitCost > 0 ? insertUnitCost : primaryVendor?.cost || 0,
+        unitCost: finalUnitCost,
       });
 
       setLineItems(
@@ -1106,13 +1122,13 @@ const ProjectDetail = () => {
           (pv) => pv.productId === product.id && pv.vendorId === insertVendorId,
         );
         vendorId = insertVendorId;
-        vendorCost = overridePV?.cost || 0;
+        vendorCost = applyVendorTaxRate(overridePV?.cost || 0, vendorId);
       } else {
         const primaryVendor = await productVendorService.getPrimaryVendor(
           product.id,
         );
         vendorId = primaryVendor?.vendorId;
-        vendorCost = primaryVendor?.cost || 0;
+        vendorCost = applyVendorTaxRate(primaryVendor?.cost || 0, vendorId);
       }
 
       const newLineItem: CreateLineItemRequest = {
@@ -1139,7 +1155,7 @@ const ProjectDetail = () => {
         unitCost: insertUnitCost > 0 ? insertUnitCost : vendorCost,
       });
 
-      setLineItems([...lineItems, created]);
+      setLineItems((prev) => [...prev, created]);
       setShowInsertProductModal(false);
       setSelectingForLineItem(null);
       setSearchTerm("");
@@ -1378,8 +1394,179 @@ const ProjectDetail = () => {
     }
   };
 
+  const sortLineItemsForDisplay = (items: LineItem[]) => {
+    return [...items].sort((a, b) => {
+      const aSeq =
+        typeof a.sequence === "number" ? a.sequence : Number.MAX_SAFE_INTEGER;
+      const bSeq =
+        typeof b.sequence === "number" ? b.sequence : Number.MAX_SAFE_INTEGER;
+      if (aSeq !== bSeq) return aSeq - bSeq;
+
+      const aTime = Date.parse(a.createdAt || "") || 0;
+      const bTime = Date.parse(b.createdAt || "") || 0;
+      if (aTime !== bTime) return aTime - bTime;
+
+      return a.id.localeCompare(b.id);
+    });
+  };
+
+  const buildResequencedLineItems = (
+    currentItems: LineItem[],
+    draggedId: string,
+    targetCategoryId: string,
+    targetLineItemId?: string,
+  ) => {
+    const draggedItem = currentItems.find((item) => item.id === draggedId);
+    if (!draggedItem) return null;
+
+    if (targetLineItemId && targetLineItemId === draggedId) return null;
+
+    const sourceCategoryId = draggedItem.categoryId;
+    const sourceItems = sortLineItemsForDisplay(
+      currentItems.filter(
+        (item) => item.categoryId === sourceCategoryId && item.id !== draggedId,
+      ),
+    );
+
+    const baseTargetItems =
+      sourceCategoryId === targetCategoryId
+        ? sourceItems
+        : sortLineItemsForDisplay(
+            currentItems.filter(
+              (item) =>
+                item.categoryId === targetCategoryId && item.id !== draggedId,
+            ),
+          );
+
+    const insertIndex = targetLineItemId
+      ? baseTargetItems.findIndex((item) => item.id === targetLineItemId)
+      : baseTargetItems.length;
+
+    const safeInsertIndex =
+      insertIndex >= 0 ? insertIndex : baseTargetItems.length;
+    const movedItem: LineItem = {
+      ...draggedItem,
+      categoryId: targetCategoryId,
+    };
+
+    const targetItems = [
+      ...baseTargetItems.slice(0, safeInsertIndex),
+      movedItem,
+      ...baseTargetItems.slice(safeInsertIndex),
+    ];
+
+    const nextById = new Map(currentItems.map((item) => [item.id, item]));
+
+    const applySequencing = (categoryId: string, items: LineItem[]) => {
+      items.forEach((item, index) => {
+        const existing = nextById.get(item.id);
+        if (!existing) return;
+        nextById.set(item.id, {
+          ...existing,
+          categoryId,
+          sequence: index + 1,
+        });
+      });
+    };
+
+    if (sourceCategoryId === targetCategoryId) {
+      applySequencing(targetCategoryId, targetItems);
+    } else {
+      applySequencing(sourceCategoryId, sourceItems);
+      applySequencing(targetCategoryId, targetItems);
+    }
+
+    return Array.from(nextById.values());
+  };
+
+  const handleLineItemDragStart = (lineItemId: string) => {
+    if (isResequencing) return;
+    setDraggingLineItemId(lineItemId);
+    setOpenActionMenu(null);
+  };
+
+  const handleLineItemDragEnd = () => {
+    setDraggingLineItemId(null);
+    setDragOverTarget(null);
+  };
+
+  const handleLineItemDragOver = (
+    e: React.DragEvent,
+    categoryId: string,
+    lineItemId?: string,
+  ) => {
+    if (!draggingLineItemId || isResequencing) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverTarget({ categoryId, lineItemId });
+  };
+
+  const handleLineItemDrop = async (
+    e: React.DragEvent,
+    targetCategoryId: string,
+    targetLineItemId?: string,
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!draggingLineItemId || isResequencing) return;
+
+    const originalItems = lineItems;
+    const resequencedItems = buildResequencedLineItems(
+      originalItems,
+      draggingLineItemId,
+      targetCategoryId,
+      targetLineItemId,
+    );
+
+    if (!resequencedItems) {
+      setDragOverTarget(null);
+      setDraggingLineItemId(null);
+      return;
+    }
+
+    const changedItems = resequencedItems.filter((nextItem) => {
+      const current = originalItems.find((item) => item.id === nextItem.id);
+      if (!current) return false;
+      return (
+        current.categoryId !== nextItem.categoryId ||
+        current.sequence !== nextItem.sequence
+      );
+    });
+
+    if (changedItems.length === 0) {
+      setDragOverTarget(null);
+      setDraggingLineItemId(null);
+      return;
+    }
+
+    setLineItems(resequencedItems);
+    setIsResequencing(true);
+    setDragOverTarget(null);
+    setDraggingLineItemId(null);
+
+    try {
+      await Promise.all(
+        changedItems.map((item) =>
+          lineItemService.update(item.id, {
+            categoryId: item.categoryId,
+            sequence: item.sequence,
+          }),
+        ),
+      );
+    } catch (err) {
+      console.error("Failed to resequence line items:", err);
+      setLineItems(originalItems);
+      alert("Failed to save line item order. Please try again.");
+    } finally {
+      setIsResequencing(false);
+    }
+  };
+
   const getCategoryLineItems = (categoryId: string) => {
-    return lineItems.filter((item) => item.categoryId === categoryId);
+    return sortLineItemsForDisplay(
+      lineItems.filter((item) => item.categoryId === categoryId),
+    );
   };
 
   const getCategoryTotal = (categoryId: string) => {
@@ -1418,6 +1605,16 @@ const ProjectDetail = () => {
       lineItems.filter((item) => item.vendorId).map((item) => item.vendorId),
     );
     return vendors.filter((v) => vendorIds.has(v.id));
+  };
+
+  const applyVendorTaxRate = (baseCost: number, vendorId?: string) => {
+    if (!vendorId) return baseCost;
+    const vendor = vendors.find((v) => v.id === vendorId);
+    const taxRate = vendor?.taxRate ?? 0;
+    if (taxRate <= 0) return baseCost;
+
+    const taxedCost = baseCost * (1 + taxRate / 100);
+    return Math.round(taxedCost * 100) / 100;
   };
 
   /**
@@ -2146,6 +2343,9 @@ const ProjectDetail = () => {
                       </div>
                       <div className="h-6 w-px bg-gray-300 mx-2"></div>
                       <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-gray-500">
+                          Drag rows to reorder/move
+                        </span>
                         <button
                           onClick={() => {
                             setEditingCategory(category);
@@ -2230,7 +2430,18 @@ const ProjectDetail = () => {
                           <th className="px-2 py-1 text-center font-medium text-gray-600 w-12 bg-gray-100"></th>
                         </tr>
                       </thead>
-                      <tbody>
+                      <tbody
+                        onDragOver={(e) =>
+                          handleLineItemDragOver(e, category.id)
+                        }
+                        onDrop={(e) => handleLineItemDrop(e, category.id)}
+                        className={
+                          dragOverTarget?.categoryId === category.id &&
+                          !dragOverTarget.lineItemId
+                            ? "bg-indigo-50/40"
+                            : undefined
+                        }
+                      >
                         {getCategoryLineItems(category.id).map((item) => {
                           const isEditing = editingItemId === item.id;
                           if (isEditing && editingItem) {
@@ -2450,12 +2661,43 @@ const ProjectDetail = () => {
                             );
                           }
                           return (
-                            <>
+                            <React.Fragment key={item.id}>
                               <tr
-                                key={item.id}
-                                className="border-b border-gray-100 hover:bg-gray-50 relative"
+                                draggable={!isResequencing}
+                                onDragStart={() =>
+                                  handleLineItemDragStart(item.id)
+                                }
+                                onDragEnd={handleLineItemDragEnd}
+                                onDragOver={(e) =>
+                                  handleLineItemDragOver(
+                                    e,
+                                    category.id,
+                                    item.id,
+                                  )
+                                }
+                                onDrop={(e) =>
+                                  handleLineItemDrop(e, category.id, item.id)
+                                }
+                                className={`border-b border-gray-100 hover:bg-gray-50 relative ${
+                                  draggingLineItemId === item.id
+                                    ? "opacity-50"
+                                    : "opacity-100"
+                                } ${
+                                  dragOverTarget?.categoryId === category.id &&
+                                  dragOverTarget?.lineItemId === item.id
+                                    ? "ring-2 ring-inset ring-indigo-400"
+                                    : ""
+                                }`}
                               >
-                                <td className="px-2 py-1">{item.name}</td>
+                                <td className="px-2 py-1">
+                                  <span
+                                    className="mr-1 text-gray-400"
+                                    title="Drag to reorder or move to another section"
+                                  >
+                                    ⋮⋮
+                                  </span>
+                                  {item.name}
+                                </td>
                                 <td className="px-2 py-1 text-right">
                                   {item.quantity}
                                 </td>
@@ -3004,7 +3246,7 @@ const ProjectDetail = () => {
                                     )}
                                   </>
                                 )}
-                            </>
+                            </React.Fragment>
                           );
                         })}
 
@@ -5582,6 +5824,11 @@ const ProjectDetail = () => {
                           const manufacturer = manufacturers.find(
                             (m) => m.id === product.manufacturerId,
                           );
+                          const variationCount = product.variations?.length || 0;
+                          const hasMultipleVariations = variationCount > 1;
+                          const isExpanded = expandedInsertProducts.has(
+                            product.id,
+                          );
                           const productVendorList = productVendors.filter(
                             (pv) => pv.productId === product.id,
                           );
@@ -5633,7 +5880,77 @@ const ProjectDetail = () => {
                                 }}
                                 onMouseLeave={() => setHoverInsertProduct(null)}
                               >
-                                {product.modelNumber || "-"}
+                                <div className="flex items-center gap-2">
+                                  <span>{product.modelNumber || "-"}</span>
+                                  {hasMultipleVariations && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setExpandedInsertProducts((prev) => {
+                                            const next = new Set(prev);
+                                            if (next.has(product.id)) {
+                                              next.delete(product.id);
+                                            } else {
+                                              next.add(product.id);
+                                            }
+                                            return next;
+                                          });
+                                        }}
+                                        className="rounded border border-gray-300 px-1 py-0 text-[10px] text-gray-700 hover:bg-gray-100"
+                                        title={
+                                          isExpanded
+                                            ? "Hide variation models"
+                                            : "Show variation models"
+                                        }
+                                      >
+                                        {isExpanded ? "▾" : "▸"}
+                                      </button>
+                                      <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
+                                        {variationCount} vars
+                                      </span>
+                                    </>
+                                  )}
+                                </div>
+                                {hasMultipleVariations && isExpanded && (
+                                  <div className="mt-1 space-y-0.5 text-[10px] text-gray-600">
+                                    {product.variations?.map(
+                                      (variation, variationIndex) => {
+                                        const effectiveModel =
+                                          variation.effectiveModelNumber ||
+                                          variation.modelNumber ||
+                                          product.modelNumber ||
+                                          "-";
+                                        const colorFinish = [
+                                          variation.color,
+                                          variation.finish,
+                                        ]
+                                          .filter(Boolean)
+                                          .join(" / ");
+                                        return (
+                                          <div
+                                            key={
+                                              variation.id ||
+                                              `${product.id}-variation-${variationIndex}`
+                                            }
+                                            className="flex items-start gap-1"
+                                          >
+                                            <span className="text-gray-400">
+                                              {variationIndex + 1}.
+                                            </span>
+                                            <span>
+                                              {effectiveModel}
+                                              {colorFinish
+                                                ? ` - ${colorFinish}`
+                                                : ""}
+                                            </span>
+                                          </div>
+                                        );
+                                      },
+                                    )}
+                                  </div>
+                                )}
                                 {hoverInsertProduct === product.id && (
                                   <div
                                     className="fixed z-50 pointer-events-none"

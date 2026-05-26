@@ -49,6 +49,7 @@ export interface Vendor {
   name: string;
   contactInfo?: string;
   website?: string;
+  taxRate?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -65,6 +66,7 @@ export interface Product {
   id: string;
   manufacturerId: string;
   name: string;
+  modelStem?: string;
   modelNumber?: string;
   description?: string;
   category?: string;
@@ -75,14 +77,38 @@ export interface Product {
   finish?: string;
   imageUrl?: string;
   productUrl?: string;
+  variations?: ProductVariation[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ProductVariation {
+  id: string;
+  productId: string;
+  modelNumber?: string;
+  effectiveModelNumber: string;
+  color?: string;
+  finish?: string;
+  imageUrl?: string;
+  sortOrder: number;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProductVariationInput {
+  id?: string;
+  modelNumber?: string;
+  color?: string;
+  finish?: string;
+  imageUrl?: string;
 }
 
 export interface LineItem {
   id: string;
   categoryId: string;
   projectId: string;
+  sequence?: number;
   name: string;
   material: string;
   quantity: number;
@@ -96,6 +122,7 @@ export interface LineItem {
   manufacturerId?: string;
   manufacturerName?: string;
   productId?: string;
+  productVariationId?: string;
   modelNumber?: string;
   allowance?: number;
   orderedDate?: string;
@@ -118,6 +145,7 @@ export interface LineItemOption {
   id: string;
   lineItemId: string;
   productId: string;
+  productVariationId?: string;
   unitCost: number;
   isSelected: boolean;
   createdAt: string;
@@ -126,6 +154,7 @@ export interface LineItemOption {
 
 export interface CreateLineItemOptionRequest {
   productId: string;
+  productVariationId?: string;
   unitCost: number;
   isSelected?: boolean;
 }
@@ -137,6 +166,7 @@ export interface UpdateLineItemOptionRequest {
 
 export interface SelectLineItemOptionRequest {
   productId: string;
+  productVariationId?: string;
   unitCost: number;
 }
 
@@ -207,6 +237,7 @@ export interface UpdateCategoryRequest {
 export interface CreateLineItemRequest {
   categoryId: string;
   projectId: string;
+  sequence?: number;
   name: string;
   material: string;
   quantity: number;
@@ -216,6 +247,7 @@ export interface CreateLineItemRequest {
   vendorId?: string;
   manufacturerId?: string;
   productId?: string;
+  productVariationId?: string;
   modelNumber?: string;
   allowance?: number;
   orderedDate?: string;
@@ -233,6 +265,8 @@ export interface CreateLineItemRequest {
 }
 
 export interface UpdateLineItemRequest {
+  categoryId?: string;
+  sequence?: number;
   name?: string;
   material?: string;
   quantity?: number;
@@ -242,6 +276,7 @@ export interface UpdateLineItemRequest {
   vendorId?: string | null;
   manufacturerId?: string | null;
   productId?: string | null;
+  productVariationId?: string | null;
   modelNumber?: string | null;
   allowance?: number;
   orderedDate?: string;
@@ -262,12 +297,14 @@ export interface CreateVendorRequest {
   name: string;
   contactInfo?: string;
   website?: string;
+  taxRate?: number;
 }
 
 export interface UpdateVendorRequest {
   name?: string;
   contactInfo?: string;
   website?: string;
+  taxRate?: number;
 }
 
 export interface CreateManufacturerRequest {
@@ -284,6 +321,7 @@ export interface CreateProductRequest {
   manufacturerId: string;
   name: string;
   modelNumber?: string;
+  overrideDuplicate?: boolean;
   description?: string;
   category?: string;
   unit?: string;
@@ -293,12 +331,15 @@ export interface CreateProductRequest {
   finish?: string;
   imageUrl?: string;
   productUrl?: string;
+  variations?: ProductVariationInput[];
 }
 
 export interface UpdateProductRequest {
   manufacturerId?: string;
   name?: string;
   modelNumber?: string;
+  overrideDuplicate?: boolean;
+  modelStem?: string;
   description?: string;
   category?: string;
   unit?: string;
@@ -308,6 +349,7 @@ export interface UpdateProductRequest {
   finish?: string;
   imageUrl?: string;
   productUrl?: string;
+  variations?: ProductVariationInput[];
 }
 
 // Order tracking interfaces

@@ -12,6 +12,7 @@ const VendorList = () => {
     name: "",
     contactInfo: "",
     website: "",
+    taxRate: 0,
   });
 
   useEffect(() => {
@@ -37,6 +38,7 @@ const VendorList = () => {
         name: vendor.name,
         contactInfo: vendor.contactInfo || "",
         website: vendor.website || "",
+        taxRate: vendor.taxRate ?? 0,
       });
     } else {
       setEditingVendor(null);
@@ -44,6 +46,7 @@ const VendorList = () => {
         name: "",
         contactInfo: "",
         website: "",
+        taxRate: 0,
       });
     }
     setIsModalOpen(true);
@@ -56,6 +59,7 @@ const VendorList = () => {
       name: "",
       contactInfo: "",
       website: "",
+      taxRate: 0,
     });
   };
 
@@ -128,6 +132,9 @@ const VendorList = () => {
                     <th className="px-2 py-2 text-left text-xs font-semibold text-gray-900">
                       Website
                     </th>
+                    <th className="px-2 py-2 text-left text-xs font-semibold text-gray-900">
+                      Tax Rate
+                    </th>
                     <th className="relative py-2 pl-2 pr-3">
                       <span className="sr-only">Actions</span>
                     </th>
@@ -137,7 +144,7 @@ const VendorList = () => {
                   {vendors.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={4}
+                        colSpan={5}
                         className="py-6 text-center text-xs text-gray-500"
                       >
                         No vendors found. Create your first vendor to get
@@ -166,6 +173,9 @@ const VendorList = () => {
                           ) : (
                             "-"
                           )}
+                        </td>
+                        <td className="px-2 py-1 text-xs text-gray-500">
+                          {(vendor.taxRate ?? 0).toFixed(2)}%
                         </td>
                         <td className="relative py-1 pl-2 pr-3 text-right text-xs font-medium space-x-2">
                           <button
@@ -224,6 +234,24 @@ const VendorList = () => {
                   }
                   rows={3}
                   placeholder="Phone, email, address, etc."
+                  className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Tax Rate (%)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={formData.taxRate}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      taxRate: Math.max(0, Number(e.target.value) || 0),
+                    })
+                  }
                   className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
                 />
               </div>

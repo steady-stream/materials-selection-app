@@ -12,6 +12,7 @@ const VendorForm = () => {
     name: "",
     contactInfo: "",
     website: undefined,
+    taxRate: 0,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,6 +30,7 @@ const VendorForm = () => {
         name: vendor.name,
         contactInfo: vendor.contactInfo || "",
         website: vendor.website,
+        taxRate: vendor.taxRate ?? 0,
       });
     } catch (err) {
       setError("Failed to load vendor");
@@ -124,6 +126,30 @@ const VendorForm = () => {
                     value={formData.contactInfo}
                     onChange={handleChange}
                     placeholder="Phone, email, address, etc."
+                    className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md px-3 py-2 border"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="taxRate"
+                    className="block text-sm font-medium text-gray-700"
+                  >
+                    Tax Rate (%)
+                  </label>
+                  <input
+                    type="number"
+                    name="taxRate"
+                    id="taxRate"
+                    min="0"
+                    step="0.01"
+                    value={formData.taxRate ?? 0}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        taxRate: Math.max(0, Number(e.target.value) || 0),
+                      }))
+                    }
                     className="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md px-3 py-2 border"
                   />
                 </div>

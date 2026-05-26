@@ -12,16 +12,16 @@ Client meeting produced two categories of feedback: product catalog setup issues
 
 ## Product-Level Feedback (P1–P8)
 
-| ID  | Description                                   | Real bug or UX gap?                                               | Session    |
-| --- | --------------------------------------------- | ----------------------------------------------------------------- | ---------- |
-| P1  | "PC" unit missing from unit select            | Bug — option just not in list                                     | Session 1  |
-| P2  | No category dropdown — free-text only         | UX gap — field exists, no autocomplete                            | Session 1  |
-| P3  | Need "Color" field on product                 | Missing field — requires Lambda deploy                            | Session 2  |
-| P4  | Need "Finish" field on product                | ✅ Done — full stack (Lambda + all components + PPTX + Review)    | Session 2  |
-| P5  | Can't see/edit vendor from Edit Product modal | UX gap — Vendors button exists in table but not linked from modal | Session 1  |
-| P6  | Image file upload (vs URL field)              | ✅ Done — presigned URL upload + URL mode                         | Session 2  |
-| P7  | Clone product                                 | Feature gap — no clone button                                     | Session 1  |
-| P8  | Add manufacturer on the fly                   | Feature gap — no inline create in dropdown                        | Session 3  |
+| ID  | Description                                   | Real bug or UX gap?                                               | Session   |
+| --- | --------------------------------------------- | ----------------------------------------------------------------- | --------- |
+| P1  | "PC" unit missing from unit select            | Bug — option just not in list                                     | Session 1 |
+| P2  | No category dropdown — free-text only         | UX gap — field exists, no autocomplete                            | Session 1 |
+| P3  | Need "Color" field on product                 | Missing field — requires Lambda deploy                            | Session 2 |
+| P4  | Need "Finish" field on product                | ✅ Done — full stack (Lambda + all components + PPTX + Review)    | Session 2 |
+| P5  | Can't see/edit vendor from Edit Product modal | UX gap — Vendors button exists in table but not linked from modal | Session 1 |
+| P6  | Image file upload (vs URL field)              | ✅ Done — presigned URL upload + URL mode                         | Session 2 |
+| P7  | Clone product                                 | Feature gap — no clone button                                     | Session 1 |
+| P8  | Add manufacturer on the fly                   | Feature gap — no inline create in dropdown                        | Session 3 |
 
 ---
 

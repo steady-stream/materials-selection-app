@@ -29,7 +29,27 @@ const ddb = DynamoDBDocumentClient.from(client);
 const VENDORS_TABLE = "MaterialsSelection-Vendors";
 const MANUFACTURERS_TABLE = "MaterialsSelection-Manufacturers";
 const PRODUCTS_TABLE = "MaterialsSelection-Products";
+const PRODUCT_VARIATIONS_TABLE = "MaterialsSelection-ProductVariations";
 const PRODUCTVENDORS_TABLE = "MaterialsSelection-ProductVendors";
+
+const MODEL_STEM_VARIATION_TOKENS = new Set([
+  "CP",
+  "BL",
+  "BN",
+  "SN",
+  "MB",
+  "PB",
+  "ORB",
+  "NI",
+  "CHROME",
+  "BLACK",
+  "MATTE",
+  "POLISHED",
+  "BRUSHED",
+  "SATIN",
+  "NICKEL",
+  "BRONZE",
+]);
 
 const headers = {
   "Content-Type": "application/json",
@@ -100,6 +120,9 @@ exports.handler = async (event) => {
     if (path.match(/^\/products\/[^/]+$/) && method === "GET") {
       return await getProduct(path.split("/")[2]);
     }
+    if (path.match(/^\/products\/[^/]+\/variations$/) && method === "GET") {
+      return await getProductVariations(path.split("/")[2]);
+    }
     if (path === "/products" && method === "POST") {
       return await createProduct(JSON.parse(event.body));
     }
@@ -150,6 +173,14 @@ exports.handler = async (event) => {
 
 // ── Vendor functions ──────────────────────────────────────────────────────────
 
+function normalizeTaxRate(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return 0;
+  }
+  return parsed;
+}
+
 async function getAllVendors() {
   const result = await ddb.send(new ScanCommand({ TableName: VENDORS_TABLE }));
   return { statusCode: 200, headers, body: JSON.stringify(result.Items || []) };
@@ -175,6 +206,7 @@ async function createVendor(data) {
     name: data.name,
     contactInfo: data.contactInfo || "",
     website: data.website || null,
+    taxRate: normalizeTaxRate(data.taxRate),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -183,7 +215,27 @@ async function createVendor(data) {
 }
 
 async function updateVendor(id, data) {
-  const vendor = { ...data, id, updatedAt: new Date().toISOString() };
+  const existing = await ddb.send(
+    new GetCommand({ TableName: VENDORS_TABLE, Key: { id } }),
+  );
+  if (!existing.Item) {
+    return {
+      statusCode: 404,
+      headers,
+      body: JSON.stringify({ message: "Vendor not found" }),
+    };
+  }
+
+  const vendor = {
+    ...existing.Item,
+    ...data,
+    id,
+    taxRate:
+      data.taxRate !== undefined
+        ? normalizeTaxRate(data.taxRate)
+        : normalizeTaxRate(existing.Item.taxRate),
+    updatedAt: new Date().toISOString(),
+  };
   await ddb.send(new PutCommand({ TableName: VENDORS_TABLE, Item: vendor }));
   return { statusCode: 200, headers, body: JSON.stringify(vendor) };
 }
@@ -247,9 +299,258 @@ async function deleteManufacturer(id) {
 
 // ── Product functions ─────────────────────────────────────────────────────────
 
+function isMissingTableError(error) {
+  return (
+    error?.name === "ResourceNotFoundException" ||
+    String(error?.message || "").includes("Requested resource not found")
+  );
+}
+
+function normalizeModelStem(rawModelNumber) {
+  const raw = String(rawModelNumber || "")
+    .toUpperCase()
+    .trim();
+  if (!raw) return "";
+
+  const tokens = raw
+    .replace(/[^A-Z0-9]+/g, " ")
+    .split(" ")
+    .filter(Boolean)
+    .filter((token) => !MODEL_STEM_VARIATION_TOKENS.has(token));
+
+  const stem = tokens.join("");
+  return stem || raw.replace(/[^A-Z0-9]/g, "");
+}
+
+function normalizeTextForKey(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function buildSyntheticVariation(product) {
+  const modelNumber = (product.modelNumber || "").trim();
+  return {
+    id: `synthetic-${product.id}`,
+    productId: product.id,
+    modelNumber: modelNumber || null,
+    effectiveModelNumber: modelNumber,
+    color: product.color || null,
+    finish: product.finish || null,
+    imageUrl: product.imageUrl || null,
+    sortOrder: 1,
+    isDefault: true,
+    createdAt: product.createdAt,
+    updatedAt: product.updatedAt,
+  };
+}
+
+function ensureVariationConstraints(variations) {
+  if (!variations.length) {
+    throw new Error("At least one variation is required");
+  }
+
+  if (variations.length > 1) {
+    for (const variation of variations) {
+      if (!variation.color && !variation.finish) {
+        throw new Error(
+          "When multiple variations exist, each variation must have color and/or finish",
+        );
+      }
+    }
+  }
+
+  const modelSet = new Set();
+  const comboSet = new Set();
+
+  for (const variation of variations) {
+    const effectiveModel = String(variation.effectiveModelNumber || "")
+      .trim()
+      .toUpperCase();
+    if (effectiveModel) {
+      if (modelSet.has(effectiveModel)) {
+        throw new Error(
+          `Duplicate variation model number within product: ${effectiveModel}`,
+        );
+      }
+      modelSet.add(effectiveModel);
+    }
+
+    const comboKey = `${normalizeTextForKey(variation.color)}|${normalizeTextForKey(variation.finish)}`;
+    if (comboSet.has(comboKey)) {
+      throw new Error("Duplicate color/finish variation within product");
+    }
+    comboSet.add(comboKey);
+  }
+}
+
+function normalizeVariationPayloads(product, variationInputs) {
+  const baseModel = String(product.modelNumber || "").trim();
+  const source =
+    Array.isArray(variationInputs) && variationInputs.length > 0
+      ? variationInputs
+      : [
+          {
+            modelNumber: baseModel,
+            color: product.color || null,
+            finish: product.finish || null,
+            imageUrl: product.imageUrl || null,
+          },
+        ];
+
+  const normalized = source.map((variation, index) => {
+    const explicitModel = String(variation.modelNumber || "").trim();
+    const effectiveModelNumber = explicitModel || baseModel;
+    return {
+      id: variation.id,
+      productId: product.id,
+      modelNumber: explicitModel || null,
+      effectiveModelNumber,
+      color: variation.color ? String(variation.color).trim() : null,
+      finish: variation.finish ? String(variation.finish).trim() : null,
+      imageUrl: variation.imageUrl ? String(variation.imageUrl).trim() : null,
+      sortOrder: index + 1,
+      isDefault: index === 0,
+    };
+  });
+
+  ensureVariationConstraints(normalized);
+  return normalized;
+}
+
+async function getProductVariationsByProductId(productId) {
+  try {
+    const result = await ddb.send(
+      new QueryCommand({
+        TableName: PRODUCT_VARIATIONS_TABLE,
+        IndexName: "ProductIdIndex",
+        KeyConditionExpression: "productId = :productId",
+        ExpressionAttributeValues: { ":productId": productId },
+      }),
+    );
+    return (result.Items || []).sort(
+      (a, b) => (a.sortOrder || 0) - (b.sortOrder || 0),
+    );
+  } catch (error) {
+    if (isMissingTableError(error)) {
+      return [];
+    }
+    throw error;
+  }
+}
+
+async function saveProductVariations(product, variationInputs) {
+  const existing = await getProductVariationsByProductId(product.id);
+  const existingById = new Map(
+    existing.map((variation) => [variation.id, variation]),
+  );
+  const now = new Date().toISOString();
+
+  const normalized = normalizeVariationPayloads(product, variationInputs);
+  const saved = normalized.map((variation) => {
+    const existingVariation = variation.id
+      ? existingById.get(variation.id)
+      : null;
+    const id = variation.id || randomUUID();
+    return {
+      ...variation,
+      id,
+      createdAt: existingVariation?.createdAt || now,
+      updatedAt: now,
+    };
+  });
+
+  for (const variation of existing) {
+    await ddb.send(
+      new DeleteCommand({
+        TableName: PRODUCT_VARIATIONS_TABLE,
+        Key: { id: variation.id },
+      }),
+    );
+  }
+
+  for (const variation of saved) {
+    await ddb.send(
+      new PutCommand({
+        TableName: PRODUCT_VARIATIONS_TABLE,
+        Item: variation,
+      }),
+    );
+  }
+
+  return saved;
+}
+
+async function hydrateProduct(product) {
+  const variations = await getProductVariationsByProductId(product.id);
+  const variationList =
+    variations.length > 0 ? variations : [buildSyntheticVariation(product)];
+  const defaultVariation =
+    variationList.find((variation) => variation.isDefault) || variationList[0];
+
+  return {
+    ...product,
+    // Keep the base model authoritative; variation effective models are carried on each variation row.
+    modelNumber: product.modelNumber || null,
+    color: defaultVariation?.color || null,
+    finish: defaultVariation?.finish || null,
+    imageUrl: defaultVariation?.imageUrl || null,
+    variations: variationList,
+  };
+}
+
+async function hydrateProducts(products) {
+  return await Promise.all(
+    (products || []).map((product) => hydrateProduct(product)),
+  );
+}
+
+async function findDuplicateProductsByStem(
+  manufacturerId,
+  modelStem,
+  excludeId,
+) {
+  if (!manufacturerId || !modelStem) return [];
+
+  const result = await ddb.send(
+    new QueryCommand({
+      TableName: PRODUCTS_TABLE,
+      IndexName: "ManufacturerIdIndex",
+      KeyConditionExpression: "manufacturerId = :manufacturerId",
+      ExpressionAttributeValues: { ":manufacturerId": manufacturerId },
+    }),
+  );
+
+  return (result.Items || []).filter(
+    (product) =>
+      product.id !== excludeId &&
+      String(product.modelStem || "") === String(modelStem),
+  );
+}
+
+function duplicateWarningResponse(modelStem, duplicates) {
+  return {
+    statusCode: 409,
+    headers,
+    body: JSON.stringify({
+      code: "DUPLICATE_PRODUCT_WARNING",
+      message:
+        "Possible duplicate product detected for this manufacturer. Override to continue.",
+      modelStem,
+      duplicates: duplicates.map((product) => ({
+        id: product.id,
+        name: product.name,
+        modelNumber: product.modelNumber || null,
+      })),
+    }),
+  };
+}
+
 async function getAllProducts() {
   const result = await ddb.send(new ScanCommand({ TableName: PRODUCTS_TABLE }));
-  return { statusCode: 200, headers, body: JSON.stringify(result.Items || []) };
+  const hydrated = await hydrateProducts(result.Items || []);
+  return { statusCode: 200, headers, body: JSON.stringify(hydrated) };
 }
 
 async function getProductsByManufacturer(manufacturerId) {
@@ -261,7 +562,8 @@ async function getProductsByManufacturer(manufacturerId) {
       ExpressionAttributeValues: { ":manufacturerId": manufacturerId },
     }),
   );
-  return { statusCode: 200, headers, body: JSON.stringify(result.Items || []) };
+  const hydrated = await hydrateProducts(result.Items || []);
+  return { statusCode: 200, headers, body: JSON.stringify(hydrated) };
 }
 
 async function getProduct(id) {
@@ -275,7 +577,28 @@ async function getProduct(id) {
       body: JSON.stringify({ message: "Product not found" }),
     };
   }
-  return { statusCode: 200, headers, body: JSON.stringify(result.Item) };
+  const hydrated = await hydrateProduct(result.Item);
+  return { statusCode: 200, headers, body: JSON.stringify(hydrated) };
+}
+
+async function getProductVariations(productId) {
+  const productResult = await ddb.send(
+    new GetCommand({ TableName: PRODUCTS_TABLE, Key: { id: productId } }),
+  );
+  if (!productResult.Item) {
+    return {
+      statusCode: 404,
+      headers,
+      body: JSON.stringify({ message: "Product not found" }),
+    };
+  }
+
+  const variations = await getProductVariationsByProductId(productId);
+  const payload =
+    variations.length > 0
+      ? variations
+      : [buildSyntheticVariation(productResult.Item)];
+  return { statusCode: 200, headers, body: JSON.stringify(payload) };
 }
 
 async function getProductImageUploadUrl({ filename, contentType }) {
@@ -318,11 +641,28 @@ async function getProductImageUploadUrl({ filename, contentType }) {
 }
 
 async function createProduct(data) {
+  const baseModelForStem =
+    String(data.modelNumber || "").trim() ||
+    String(data?.variations?.[0]?.modelNumber || "").trim();
+  const modelStem = normalizeModelStem(baseModelForStem);
+
+  if (!data.overrideDuplicate && modelStem) {
+    const duplicates = await findDuplicateProductsByStem(
+      data.manufacturerId,
+      modelStem,
+      undefined,
+    );
+    if (duplicates.length > 0) {
+      return duplicateWarningResponse(modelStem, duplicates);
+    }
+  }
+
   const product = {
     id: randomUUID(),
     manufacturerId: data.manufacturerId,
     name: data.name,
     modelNumber: data.modelNumber || null,
+    modelStem: modelStem || null,
     description: data.description || "",
     category: data.category || null,
     unit: data.unit || null,
@@ -336,7 +676,13 @@ async function createProduct(data) {
     updatedAt: new Date().toISOString(),
   };
   await ddb.send(new PutCommand({ TableName: PRODUCTS_TABLE, Item: product }));
-  return { statusCode: 201, headers, body: JSON.stringify(product) };
+
+  const savedVariations = await saveProductVariations(product, data.variations);
+  const responseProduct = await hydrateProduct({
+    ...product,
+    variations: savedVariations,
+  });
+  return { statusCode: 201, headers, body: JSON.stringify(responseProduct) };
 }
 
 async function updateProduct(id, data) {
@@ -350,17 +696,54 @@ async function updateProduct(id, data) {
       body: JSON.stringify({ error: "Product not found" }),
     };
   }
+
+  const nextModelNumber =
+    data.modelNumber !== undefined
+      ? data.modelNumber
+      : getResult.Item.modelNumber || "";
+  const baseModelForStem =
+    String(nextModelNumber || "").trim() ||
+    String(data?.variations?.[0]?.modelNumber || "").trim();
+  const modelStem = normalizeModelStem(baseModelForStem);
+
+  if (!data.overrideDuplicate && modelStem) {
+    const duplicates = await findDuplicateProductsByStem(
+      data.manufacturerId || getResult.Item.manufacturerId,
+      modelStem,
+      id,
+    );
+    if (duplicates.length > 0) {
+      return duplicateWarningResponse(modelStem, duplicates);
+    }
+  }
+
   const product = {
     ...getResult.Item,
     ...data,
     id,
+    modelStem: modelStem || null,
     updatedAt: new Date().toISOString(),
   };
   await ddb.send(new PutCommand({ TableName: PRODUCTS_TABLE, Item: product }));
-  return { statusCode: 200, headers, body: JSON.stringify(product) };
+
+  const savedVariations = await saveProductVariations(product, data.variations);
+  const responseProduct = await hydrateProduct({
+    ...product,
+    variations: savedVariations,
+  });
+  return { statusCode: 200, headers, body: JSON.stringify(responseProduct) };
 }
 
 async function deleteProduct(id) {
+  const variations = await getProductVariationsByProductId(id);
+  for (const variation of variations) {
+    await ddb.send(
+      new DeleteCommand({
+        TableName: PRODUCT_VARIATIONS_TABLE,
+        Key: { id: variation.id },
+      }),
+    );
+  }
   await ddb.send(new DeleteCommand({ TableName: PRODUCTS_TABLE, Key: { id } }));
   return { statusCode: 204, headers, body: "" };
 }

@@ -41,11 +41,31 @@ const LINEITEMS_TABLE = "MaterialsSelection-LineItems";
 const VENDORS_TABLE = "MaterialsSelection-Vendors";
 const MANUFACTURERS_TABLE = "MaterialsSelection-Manufacturers";
 const PRODUCTS_TABLE = "MaterialsSelection-Products";
+const PRODUCT_VARIATIONS_TABLE = "MaterialsSelection-ProductVariations";
 const ORDERS_TABLE = "MaterialsSelection-Orders";
 const ORDERITEMS_TABLE = "MaterialsSelection-OrderItems";
 const RECEIPTS_TABLE = "MaterialsSelection-Receipts";
 const PRODUCTVENDORS_TABLE = "MaterialsSelection-ProductVendors";
 const LINEITEMOPTIONS_TABLE = "MaterialsSelection-LineItemOptions";
+
+const MODEL_STEM_VARIATION_TOKENS = new Set([
+  "CP",
+  "BL",
+  "BN",
+  "SN",
+  "MB",
+  "PB",
+  "ORB",
+  "NI",
+  "CHROME",
+  "BLACK",
+  "MATTE",
+  "POLISHED",
+  "BRUSHED",
+  "SATIN",
+  "NICKEL",
+  "BRONZE",
+]);
 
 const headers = {
   "Content-Type": "application/json",
@@ -283,6 +303,10 @@ exports.handler = async (event) => {
     if (path.match(/^\/products\/[^\/]+$/) && method === "GET") {
       const id = path.split("/")[2];
       return await getProduct(id);
+    }
+    if (path.match(/^\/products\/[^\/]+\/variations$/) && method === "GET") {
+      const productId = path.split("/")[2];
+      return await getProductVariations(productId);
     }
     if (path === "/products" && method === "POST") {
       return await createProduct(JSON.parse(event.body));
@@ -839,6 +863,56 @@ async function deleteCategory(id) {
 }
 
 // LineItem functions
+function getLineItemSortTimestamp(item) {
+  const raw = item.updatedAt || item.createdAt;
+  const parsed = raw ? Date.parse(raw) : NaN;
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function getLineItemSortSequence(item, fallback) {
+  if (typeof item.sequence === "number" && Number.isFinite(item.sequence)) {
+    return item.sequence;
+  }
+  return fallback;
+}
+
+function sortLineItems(items) {
+  return [...items].sort((a, b) => {
+    if (a.categoryId !== b.categoryId) {
+      return String(a.categoryId).localeCompare(String(b.categoryId));
+    }
+    const aSeq = getLineItemSortSequence(a, Number.MAX_SAFE_INTEGER);
+    const bSeq = getLineItemSortSequence(b, Number.MAX_SAFE_INTEGER);
+    if (aSeq !== bSeq) return aSeq - bSeq;
+    const aTs = getLineItemSortTimestamp(a);
+    const bTs = getLineItemSortTimestamp(b);
+    if (aTs !== bTs) return aTs - bTs;
+    return String(a.id).localeCompare(String(b.id));
+  });
+}
+
+async function getNextSequenceForCategory(categoryId) {
+  const result = await ddb.send(
+    new QueryCommand({
+      TableName: LINEITEMS_TABLE,
+      IndexName: "CategoryIdIndex",
+      KeyConditionExpression: "categoryId = :categoryId",
+      ExpressionAttributeValues: { ":categoryId": categoryId },
+    }),
+  );
+
+  const items = result.Items || [];
+  const maxExplicitSequence = items.reduce((max, item) => {
+    if (typeof item.sequence === "number" && Number.isFinite(item.sequence)) {
+      return Math.max(max, item.sequence);
+    }
+    return max;
+  }, 0);
+
+  const baseline = Math.max(maxExplicitSequence, items.length);
+  return baseline + 1;
+}
+
 async function getLineItemsByCategory(categoryId) {
   const result = await ddb.send(
     new QueryCommand({
@@ -848,7 +922,11 @@ async function getLineItemsByCategory(categoryId) {
       ExpressionAttributeValues: { ":categoryId": categoryId },
     }),
   );
-  return { statusCode: 200, headers, body: JSON.stringify(result.Items || []) };
+  return {
+    statusCode: 200,
+    headers,
+    body: JSON.stringify(sortLineItems(result.Items || [])),
+  };
 }
 
 async function getLineItemsByProject(projectId) {
@@ -860,7 +938,11 @@ async function getLineItemsByProject(projectId) {
       ExpressionAttributeValues: { ":projectId": projectId },
     }),
   );
-  return { statusCode: 200, headers, body: JSON.stringify(result.Items || []) };
+  return {
+    statusCode: 200,
+    headers,
+    body: JSON.stringify(sortLineItems(result.Items || [])),
+  };
 }
 
 async function getLineItem(id) {
@@ -879,10 +961,15 @@ async function getLineItem(id) {
 
 async function createLineItem(data) {
   const totalCost = data.quantity * data.unitCost;
+  const sequence =
+    typeof data.sequence === "number" && Number.isFinite(data.sequence)
+      ? data.sequence
+      : await getNextSequenceForCategory(data.categoryId);
   const lineItem = {
     id: randomUUID(),
     categoryId: data.categoryId,
     projectId: data.projectId,
+    sequence,
     name: data.name,
     material: data.material,
     quantity: data.quantity,
@@ -893,6 +980,7 @@ async function createLineItem(data) {
     vendorId: data.vendorId || null,
     manufacturerId: data.manufacturerId || null,
     productId: data.productId || null,
+    productVariationId: data.productVariationId || null,
     modelNumber: data.modelNumber || null,
     allowance: data.allowance || null,
     orderedDate: data.orderedDate || null,
@@ -927,6 +1015,48 @@ async function updateLineItem(id, data) {
     };
   }
 
+  const updateData = { ...data };
+
+  if (
+    updateData.categoryId &&
+    updateData.categoryId !== existing.Item.categoryId
+  ) {
+    const targetCategory = await ddb.send(
+      new GetCommand({
+        TableName: CATEGORIES_TABLE,
+        Key: { id: updateData.categoryId },
+      }),
+    );
+
+    if (!targetCategory.Item) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ message: "Target category not found" }),
+      };
+    }
+
+    if (targetCategory.Item.projectId !== existing.Item.projectId) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({
+          message: "Cannot move line item to a category in another project",
+        }),
+      };
+    }
+
+    if (
+      updateData.sequence === undefined ||
+      updateData.sequence === null ||
+      !Number.isFinite(updateData.sequence)
+    ) {
+      updateData.sequence = await getNextSequenceForCategory(
+        updateData.categoryId,
+      );
+    }
+  }
+
   // Build UpdateExpression for SET and REMOVE
   const setExpressions = [];
   const removeExpressions = [];
@@ -941,7 +1071,6 @@ async function updateLineItem(id, data) {
   // Fields that should never be updated (immutable, structural, computed, or virtual)
   const IMMUTABLE_FIELDS = [
     "id",
-    "categoryId",
     "projectId",
     "createdAt",
     "updatedAt",
@@ -951,7 +1080,7 @@ async function updateLineItem(id, data) {
   ];
 
   // Process each field
-  Object.keys(data).forEach((key) => {
+  Object.keys(updateData).forEach((key) => {
     // Skip immutable fields
     if (IMMUTABLE_FIELDS.includes(key)) {
       return;
@@ -960,12 +1089,12 @@ async function updateLineItem(id, data) {
     const attrName = `#${key}`;
     const attrValue = `:${key}`;
 
-    if (data[key] !== null && data[key] !== undefined) {
+    if (updateData[key] !== null && updateData[key] !== undefined) {
       // SET the value (including empty string and 0)
       setExpressions.push(`${attrName} = ${attrValue}`);
       expressionAttributeNames[attrName] = key;
-      expressionAttributeValues[attrValue] = data[key];
-    } else if (data[key] === null) {
+      expressionAttributeValues[attrValue] = updateData[key];
+    } else if (updateData[key] === null) {
       // REMOVE the attribute when null
       removeExpressions.push(attrName);
       expressionAttributeNames[attrName] = key;
@@ -984,11 +1113,15 @@ async function updateLineItem(id, data) {
   }
 
   // Recalculate totalCost if quantity or unitCost are being updated
-  if (data.quantity !== undefined || data.unitCost !== undefined) {
+  if (updateData.quantity !== undefined || updateData.unitCost !== undefined) {
     const newQuantity =
-      data.quantity !== undefined ? data.quantity : existing.Item.quantity;
+      updateData.quantity !== undefined
+        ? updateData.quantity
+        : existing.Item.quantity;
     const newUnitCost =
-      data.unitCost !== undefined ? data.unitCost : existing.Item.unitCost;
+      updateData.unitCost !== undefined
+        ? updateData.unitCost
+        : existing.Item.unitCost;
     if (newQuantity !== undefined && newUnitCost !== undefined) {
       setExpressions.push("#totalCost = :totalCost");
       expressionAttributeNames["#totalCost"] = "totalCost";
@@ -1046,6 +1179,8 @@ async function createLineItemOption(lineItemId, data) {
     id: randomUUID(),
     lineItemId: lineItemId,
     productId: data.productId,
+    productVariationId: data.productVariationId || null,
+    modelNumber: data.modelNumber || null,
     unitCost: data.unitCost,
     isSelected: data.isSelected || false,
     createdAt: new Date().toISOString(),
@@ -1071,6 +1206,21 @@ async function updateLineItemOption(optionId, data) {
     updateParts.push("#unitCost = :unitCost");
     expressionAttributeNames["#unitCost"] = "unitCost";
     expressionAttributeValues[":unitCost"] = data.unitCost;
+  }
+  if (data.productId !== undefined) {
+    updateParts.push("#productId = :productId");
+    expressionAttributeNames["#productId"] = "productId";
+    expressionAttributeValues[":productId"] = data.productId;
+  }
+  if (data.productVariationId !== undefined) {
+    updateParts.push("#productVariationId = :productVariationId");
+    expressionAttributeNames["#productVariationId"] = "productVariationId";
+    expressionAttributeValues[":productVariationId"] = data.productVariationId;
+  }
+  if (data.modelNumber !== undefined) {
+    updateParts.push("#modelNumber = :modelNumber");
+    expressionAttributeNames["#modelNumber"] = "modelNumber";
+    expressionAttributeValues[":modelNumber"] = data.modelNumber;
   }
   if (data.isSelected !== undefined) {
     updateParts.push("#isSelected = :isSelected");
@@ -1102,8 +1252,12 @@ async function updateLineItemOption(optionId, data) {
 }
 
 async function selectLineItemOption(lineItemId, data) {
-  // data = { productId, unitCost }
-  const { productId, unitCost } = data;
+  const {
+    productId,
+    productVariationId = null,
+    modelNumber = null,
+    unitCost,
+  } = data;
 
   // 1. Get all options for this line item
   const queryResult = await ddb.send(
@@ -1118,9 +1272,10 @@ async function selectLineItemOption(lineItemId, data) {
   );
 
   const existingOptions = queryResult.Items || [];
-  const matchingOption = existingOptions.find(
-    (opt) => opt.productId === productId,
-  );
+  const isSameOption = (opt) =>
+    opt.productId === productId &&
+    (opt.productVariationId || null) === (productVariationId || null);
+  const matchingOption = existingOptions.find((opt) => isSameOption(opt));
 
   let selectedOption;
 
@@ -1132,15 +1287,19 @@ async function selectLineItemOption(lineItemId, data) {
         TableName: LINEITEMOPTIONS_TABLE,
         Key: { id: matchingOption.id },
         UpdateExpression:
-          "SET #isSelected = :isSelected, #unitCost = :unitCost, #updatedAt = :updatedAt",
+          "SET #isSelected = :isSelected, #unitCost = :unitCost, #productVariationId = :productVariationId, #modelNumber = :modelNumber, #updatedAt = :updatedAt",
         ExpressionAttributeNames: {
           "#isSelected": "isSelected",
           "#unitCost": "unitCost",
+          "#productVariationId": "productVariationId",
+          "#modelNumber": "modelNumber",
           "#updatedAt": "updatedAt",
         },
         ExpressionAttributeValues: {
           ":isSelected": true,
           ":unitCost": unitCost,
+          ":productVariationId": productVariationId,
+          ":modelNumber": modelNumber,
           ":updatedAt": new Date().toISOString(),
         },
         ReturnValues: "ALL_NEW",
@@ -1153,6 +1312,8 @@ async function selectLineItemOption(lineItemId, data) {
       id: randomUUID(),
       lineItemId: lineItemId,
       productId: productId,
+      productVariationId: productVariationId,
+      modelNumber: modelNumber,
       unitCost: unitCost,
       isSelected: true,
       createdAt: new Date().toISOString(),
@@ -1168,7 +1329,7 @@ async function selectLineItemOption(lineItemId, data) {
 
   // 3. Deselect all other options for this line item
   const deselectPromises = existingOptions
-    .filter((opt) => opt.productId !== productId && opt.isSelected)
+    .filter((opt) => !isSameOption(opt) && opt.isSelected)
     .map((opt) =>
       ddb.send(
         new UpdateCommand({
@@ -1208,6 +1369,14 @@ async function deleteLineItemOption(optionId) {
 }
 
 // Vendor functions
+function normalizeTaxRate(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return 0;
+  }
+  return parsed;
+}
+
 async function getAllVendors() {
   const result = await ddb.send(new ScanCommand({ TableName: VENDORS_TABLE }));
   return { statusCode: 200, headers, body: JSON.stringify(result.Items || []) };
@@ -1233,6 +1402,7 @@ async function createVendor(data) {
     name: data.name,
     contactInfo: data.contactInfo || "",
     website: data.website || null,
+    taxRate: normalizeTaxRate(data.taxRate),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -1241,9 +1411,25 @@ async function createVendor(data) {
 }
 
 async function updateVendor(id, data) {
+  const existing = await ddb.send(
+    new GetCommand({ TableName: VENDORS_TABLE, Key: { id } }),
+  );
+  if (!existing.Item) {
+    return {
+      statusCode: 404,
+      headers,
+      body: JSON.stringify({ message: "Vendor not found" }),
+    };
+  }
+
   const vendor = {
+    ...existing.Item,
     ...data,
     id,
+    taxRate:
+      data.taxRate !== undefined
+        ? normalizeTaxRate(data.taxRate)
+        : normalizeTaxRate(existing.Item.taxRate),
     updatedAt: new Date().toISOString(),
   };
   await ddb.send(new PutCommand({ TableName: VENDORS_TABLE, Item: vendor }));
@@ -1311,9 +1497,258 @@ async function deleteManufacturer(id) {
 }
 
 // Product functions
+function isMissingTableError(error) {
+  return (
+    error?.name === "ResourceNotFoundException" ||
+    String(error?.message || "").includes("Requested resource not found")
+  );
+}
+
+function normalizeModelStem(rawModelNumber) {
+  const raw = String(rawModelNumber || "")
+    .toUpperCase()
+    .trim();
+  if (!raw) return "";
+
+  const tokens = raw
+    .replace(/[^A-Z0-9]+/g, " ")
+    .split(" ")
+    .filter(Boolean)
+    .filter((token) => !MODEL_STEM_VARIATION_TOKENS.has(token));
+
+  const stem = tokens.join("");
+  return stem || raw.replace(/[^A-Z0-9]/g, "");
+}
+
+function normalizeTextForKey(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function buildSyntheticVariation(product) {
+  const modelNumber = (product.modelNumber || "").trim();
+  return {
+    id: `synthetic-${product.id}`,
+    productId: product.id,
+    modelNumber: modelNumber || null,
+    effectiveModelNumber: modelNumber,
+    color: product.color || null,
+    finish: product.finish || null,
+    imageUrl: product.imageUrl || null,
+    sortOrder: 1,
+    isDefault: true,
+    createdAt: product.createdAt,
+    updatedAt: product.updatedAt,
+  };
+}
+
+function ensureVariationConstraints(variations) {
+  if (!variations.length) {
+    throw new Error("At least one variation is required");
+  }
+
+  if (variations.length > 1) {
+    for (const variation of variations) {
+      if (!variation.color && !variation.finish) {
+        throw new Error(
+          "When multiple variations exist, each variation must have color and/or finish",
+        );
+      }
+    }
+  }
+
+  const modelSet = new Set();
+  const comboSet = new Set();
+
+  for (const variation of variations) {
+    const effectiveModel = String(variation.effectiveModelNumber || "")
+      .trim()
+      .toUpperCase();
+    if (effectiveModel) {
+      if (modelSet.has(effectiveModel)) {
+        throw new Error(
+          `Duplicate variation model number within product: ${effectiveModel}`,
+        );
+      }
+      modelSet.add(effectiveModel);
+    }
+
+    const comboKey = `${normalizeTextForKey(variation.color)}|${normalizeTextForKey(variation.finish)}`;
+    if (comboSet.has(comboKey)) {
+      throw new Error("Duplicate color/finish variation within product");
+    }
+    comboSet.add(comboKey);
+  }
+}
+
+function normalizeVariationPayloads(product, variationInputs) {
+  const baseModel = String(product.modelNumber || "").trim();
+  const source =
+    Array.isArray(variationInputs) && variationInputs.length > 0
+      ? variationInputs
+      : [
+          {
+            modelNumber: baseModel,
+            color: product.color || null,
+            finish: product.finish || null,
+            imageUrl: product.imageUrl || null,
+          },
+        ];
+
+  const normalized = source.map((variation, index) => {
+    const explicitModel = String(variation.modelNumber || "").trim();
+    const effectiveModelNumber = explicitModel || baseModel;
+    return {
+      id: variation.id,
+      productId: product.id,
+      modelNumber: explicitModel || null,
+      effectiveModelNumber,
+      color: variation.color ? String(variation.color).trim() : null,
+      finish: variation.finish ? String(variation.finish).trim() : null,
+      imageUrl: variation.imageUrl ? String(variation.imageUrl).trim() : null,
+      sortOrder: index + 1,
+      isDefault: index === 0,
+    };
+  });
+
+  ensureVariationConstraints(normalized);
+  return normalized;
+}
+
+async function getProductVariationsByProductId(productId) {
+  try {
+    const result = await ddb.send(
+      new QueryCommand({
+        TableName: PRODUCT_VARIATIONS_TABLE,
+        IndexName: "ProductIdIndex",
+        KeyConditionExpression: "productId = :productId",
+        ExpressionAttributeValues: { ":productId": productId },
+      }),
+    );
+    return (result.Items || []).sort(
+      (a, b) => (a.sortOrder || 0) - (b.sortOrder || 0),
+    );
+  } catch (error) {
+    if (isMissingTableError(error)) {
+      return [];
+    }
+    throw error;
+  }
+}
+
+async function saveProductVariations(product, variationInputs) {
+  const existing = await getProductVariationsByProductId(product.id);
+  const existingById = new Map(
+    existing.map((variation) => [variation.id, variation]),
+  );
+  const now = new Date().toISOString();
+
+  const normalized = normalizeVariationPayloads(product, variationInputs);
+  const saved = normalized.map((variation) => {
+    const existingVariation = variation.id
+      ? existingById.get(variation.id)
+      : null;
+    const id = variation.id || randomUUID();
+    return {
+      ...variation,
+      id,
+      createdAt: existingVariation?.createdAt || now,
+      updatedAt: now,
+    };
+  });
+
+  for (const variation of existing) {
+    await ddb.send(
+      new DeleteCommand({
+        TableName: PRODUCT_VARIATIONS_TABLE,
+        Key: { id: variation.id },
+      }),
+    );
+  }
+
+  for (const variation of saved) {
+    await ddb.send(
+      new PutCommand({
+        TableName: PRODUCT_VARIATIONS_TABLE,
+        Item: variation,
+      }),
+    );
+  }
+
+  return saved;
+}
+
+async function hydrateProduct(product) {
+  const variations = await getProductVariationsByProductId(product.id);
+  const variationList =
+    variations.length > 0 ? variations : [buildSyntheticVariation(product)];
+  const defaultVariation =
+    variationList.find((variation) => variation.isDefault) || variationList[0];
+
+  return {
+    ...product,
+    // Keep the base model authoritative; variation effective models are carried on each variation row.
+    modelNumber: product.modelNumber || null,
+    color: defaultVariation?.color || null,
+    finish: defaultVariation?.finish || null,
+    imageUrl: defaultVariation?.imageUrl || null,
+    variations: variationList,
+  };
+}
+
+async function hydrateProducts(products) {
+  return await Promise.all(
+    (products || []).map((product) => hydrateProduct(product)),
+  );
+}
+
+async function findDuplicateProductsByStem(
+  manufacturerId,
+  modelStem,
+  excludeId,
+) {
+  if (!manufacturerId || !modelStem) return [];
+
+  const result = await ddb.send(
+    new QueryCommand({
+      TableName: PRODUCTS_TABLE,
+      IndexName: "ManufacturerIdIndex",
+      KeyConditionExpression: "manufacturerId = :manufacturerId",
+      ExpressionAttributeValues: { ":manufacturerId": manufacturerId },
+    }),
+  );
+
+  return (result.Items || []).filter(
+    (product) =>
+      product.id !== excludeId &&
+      String(product.modelStem || "") === String(modelStem),
+  );
+}
+
+function duplicateWarningResponse(modelStem, duplicates) {
+  return {
+    statusCode: 409,
+    headers,
+    body: JSON.stringify({
+      code: "DUPLICATE_PRODUCT_WARNING",
+      message:
+        "Possible duplicate product detected for this manufacturer. Override to continue.",
+      modelStem,
+      duplicates: duplicates.map((product) => ({
+        id: product.id,
+        name: product.name,
+        modelNumber: product.modelNumber || null,
+      })),
+    }),
+  };
+}
+
 async function getAllProducts() {
   const result = await ddb.send(new ScanCommand({ TableName: PRODUCTS_TABLE }));
-  return { statusCode: 200, headers, body: JSON.stringify(result.Items || []) };
+  const hydrated = await hydrateProducts(result.Items || []);
+  return { statusCode: 200, headers, body: JSON.stringify(hydrated) };
 }
 
 async function getProductsByManufacturer(manufacturerId) {
@@ -1325,7 +1760,8 @@ async function getProductsByManufacturer(manufacturerId) {
       ExpressionAttributeValues: { ":manufacturerId": manufacturerId },
     }),
   );
-  return { statusCode: 200, headers, body: JSON.stringify(result.Items || []) };
+  const hydrated = await hydrateProducts(result.Items || []);
+  return { statusCode: 200, headers, body: JSON.stringify(hydrated) };
 }
 
 async function getProduct(id) {
@@ -1339,15 +1775,53 @@ async function getProduct(id) {
       body: JSON.stringify({ message: "Product not found" }),
     };
   }
-  return { statusCode: 200, headers, body: JSON.stringify(result.Item) };
+  const hydrated = await hydrateProduct(result.Item);
+  return { statusCode: 200, headers, body: JSON.stringify(hydrated) };
+}
+
+async function getProductVariations(productId) {
+  const productResult = await ddb.send(
+    new GetCommand({ TableName: PRODUCTS_TABLE, Key: { id: productId } }),
+  );
+  if (!productResult.Item) {
+    return {
+      statusCode: 404,
+      headers,
+      body: JSON.stringify({ message: "Product not found" }),
+    };
+  }
+
+  const variations = await getProductVariationsByProductId(productId);
+  const payload =
+    variations.length > 0
+      ? variations
+      : [buildSyntheticVariation(productResult.Item)];
+  return { statusCode: 200, headers, body: JSON.stringify(payload) };
 }
 
 async function createProduct(data) {
+  const baseModelForStem =
+    String(data.modelNumber || "").trim() ||
+    String(data?.variations?.[0]?.modelNumber || "").trim();
+  const modelStem = normalizeModelStem(baseModelForStem);
+
+  if (!data.overrideDuplicate && modelStem) {
+    const duplicates = await findDuplicateProductsByStem(
+      data.manufacturerId,
+      modelStem,
+      undefined,
+    );
+    if (duplicates.length > 0) {
+      return duplicateWarningResponse(modelStem, duplicates);
+    }
+  }
+
   const product = {
     id: randomUUID(),
     manufacturerId: data.manufacturerId,
     name: data.name,
     modelNumber: data.modelNumber || null,
+    modelStem: modelStem || null,
     description: data.description || "",
     category: data.category || null,
     unit: data.unit || null,
@@ -1359,7 +1833,13 @@ async function createProduct(data) {
     updatedAt: new Date().toISOString(),
   };
   await ddb.send(new PutCommand({ TableName: PRODUCTS_TABLE, Item: product }));
-  return { statusCode: 201, headers, body: JSON.stringify(product) };
+
+  const savedVariations = await saveProductVariations(product, data.variations);
+  const responseProduct = await hydrateProduct({
+    ...product,
+    variations: savedVariations,
+  });
+  return { statusCode: 201, headers, body: JSON.stringify(responseProduct) };
 }
 
 async function updateProduct(id, data) {
@@ -1375,17 +1855,53 @@ async function updateProduct(id, data) {
     };
   }
 
+  const nextModelNumber =
+    data.modelNumber !== undefined
+      ? data.modelNumber
+      : getResult.Item.modelNumber || "";
+  const baseModelForStem =
+    String(nextModelNumber || "").trim() ||
+    String(data?.variations?.[0]?.modelNumber || "").trim();
+  const modelStem = normalizeModelStem(baseModelForStem);
+
+  if (!data.overrideDuplicate && modelStem) {
+    const duplicates = await findDuplicateProductsByStem(
+      data.manufacturerId || getResult.Item.manufacturerId,
+      modelStem,
+      id,
+    );
+    if (duplicates.length > 0) {
+      return duplicateWarningResponse(modelStem, duplicates);
+    }
+  }
+
   const product = {
     ...getResult.Item,
     ...data,
     id,
+    modelStem: modelStem || null,
     updatedAt: new Date().toISOString(),
   };
   await ddb.send(new PutCommand({ TableName: PRODUCTS_TABLE, Item: product }));
-  return { statusCode: 200, headers, body: JSON.stringify(product) };
+
+  const savedVariations = await saveProductVariations(product, data.variations);
+  const responseProduct = await hydrateProduct({
+    ...product,
+    variations: savedVariations,
+  });
+  return { statusCode: 200, headers, body: JSON.stringify(responseProduct) };
 }
 
 async function deleteProduct(id) {
+  const variations = await getProductVariationsByProductId(id);
+  for (const variation of variations) {
+    await ddb.send(
+      new DeleteCommand({
+        TableName: PRODUCT_VARIATIONS_TABLE,
+        Key: { id: variation.id },
+      }),
+    );
+  }
   await ddb.send(new DeleteCommand({ TableName: PRODUCTS_TABLE, Key: { id } }));
   return { statusCode: 204, headers, body: "" };
 }

@@ -115,9 +115,9 @@ Client provided finish list (36 finishes). Implemented across the entire stack:
 
 ### Git Commits (April 18, 2026)
 
-| Hash      | Description                                                |
-| --------- | ---------------------------------------------------------- |
-| _(below)_ | feat: P4 finish field — full stack + PowerPoint + Review   |
+| Hash      | Description                                              |
+| --------- | -------------------------------------------------------- |
+| _(below)_ | feat: P4 finish field — full stack + PowerPoint + Review |
 
 ---
 

@@ -10,6 +10,22 @@ const CategoryDetail = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const sortLineItemsForDisplay = (items: LineItem[]) => {
+    return [...items].sort((a, b) => {
+      const aSeq =
+        typeof a.sequence === "number" ? a.sequence : Number.MAX_SAFE_INTEGER;
+      const bSeq =
+        typeof b.sequence === "number" ? b.sequence : Number.MAX_SAFE_INTEGER;
+      if (aSeq !== bSeq) return aSeq - bSeq;
+
+      const aTime = Date.parse(a.createdAt || "") || 0;
+      const bTime = Date.parse(b.createdAt || "") || 0;
+      if (aTime !== bTime) return aTime - bTime;
+
+      return a.id.localeCompare(b.id);
+    });
+  };
+
   useEffect(() => {
     if (id) {
       loadCategoryData(id);
@@ -24,7 +40,7 @@ const CategoryDetail = () => {
         lineItemService.getByCategoryId(categoryId),
       ]);
       setCategory(categoryData);
-      setLineItems(lineItemsData);
+      setLineItems(sortLineItemsForDisplay(lineItemsData));
       setError(null);
     } catch (err) {
       setError("Failed to load section details");
@@ -39,7 +55,9 @@ const CategoryDetail = () => {
 
     try {
       await lineItemService.delete(lineItemId);
-      setLineItems(lineItems.filter((li) => li.id !== lineItemId));
+      setLineItems(
+        sortLineItemsForDisplay(lineItems.filter((li) => li.id !== lineItemId)),
+      );
     } catch (err) {
       alert("Failed to delete line item");
       console.error("Error deleting line item:", err);

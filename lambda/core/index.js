@@ -217,6 +217,57 @@ async function deleteCategory(id) {
 
 // ── LineItem functions ────────────────────────────────────────────────────────
 
+function getLineItemSortTimestamp(item) {
+  const raw = item.updatedAt || item.createdAt;
+  const parsed = raw ? Date.parse(raw) : NaN;
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function getLineItemSortSequence(item, fallback) {
+  if (typeof item.sequence === "number" && Number.isFinite(item.sequence)) {
+    return item.sequence;
+  }
+  return fallback;
+}
+
+function sortLineItems(items) {
+  return [...items].sort((a, b) => {
+    if (a.categoryId !== b.categoryId) {
+      return String(a.categoryId).localeCompare(String(b.categoryId));
+    }
+    const aSeq = getLineItemSortSequence(a, Number.MAX_SAFE_INTEGER);
+    const bSeq = getLineItemSortSequence(b, Number.MAX_SAFE_INTEGER);
+    if (aSeq !== bSeq) return aSeq - bSeq;
+    const aTs = getLineItemSortTimestamp(a);
+    const bTs = getLineItemSortTimestamp(b);
+    if (aTs !== bTs) return aTs - bTs;
+    return String(a.id).localeCompare(String(b.id));
+  });
+}
+
+async function getNextSequenceForCategory(categoryId) {
+  const result = await ddb.send(
+    new QueryCommand({
+      TableName: LINEITEMS_TABLE,
+      IndexName: "CategoryIdIndex",
+      KeyConditionExpression: "categoryId = :categoryId",
+      ExpressionAttributeValues: { ":categoryId": categoryId },
+    }),
+  );
+
+  const items = result.Items || [];
+  const maxExplicitSequence = items.reduce((max, item) => {
+    if (typeof item.sequence === "number" && Number.isFinite(item.sequence)) {
+      return Math.max(max, item.sequence);
+    }
+    return max;
+  }, 0);
+
+  // For legacy rows that don't have sequence yet, append after current count.
+  const baseline = Math.max(maxExplicitSequence, items.length);
+  return baseline + 1;
+}
+
 async function getLineItemsByCategory(categoryId) {
   const result = await ddb.send(
     new QueryCommand({
@@ -226,7 +277,11 @@ async function getLineItemsByCategory(categoryId) {
       ExpressionAttributeValues: { ":categoryId": categoryId },
     }),
   );
-  return { statusCode: 200, headers, body: JSON.stringify(result.Items || []) };
+  return {
+    statusCode: 200,
+    headers,
+    body: JSON.stringify(sortLineItems(result.Items || [])),
+  };
 }
 
 async function getLineItemsByProject(projectId) {
@@ -238,7 +293,11 @@ async function getLineItemsByProject(projectId) {
       ExpressionAttributeValues: { ":projectId": projectId },
     }),
   );
-  return { statusCode: 200, headers, body: JSON.stringify(result.Items || []) };
+  return {
+    statusCode: 200,
+    headers,
+    body: JSON.stringify(sortLineItems(result.Items || [])),
+  };
 }
 
 async function getLineItem(id) {
@@ -257,10 +316,15 @@ async function getLineItem(id) {
 
 async function createLineItem(data) {
   const totalCost = data.quantity * data.unitCost;
+  const sequence =
+    typeof data.sequence === "number" && Number.isFinite(data.sequence)
+      ? data.sequence
+      : await getNextSequenceForCategory(data.categoryId);
   const lineItem = {
     id: randomUUID(),
     categoryId: data.categoryId,
     projectId: data.projectId,
+    sequence,
     name: data.name,
     material: data.material,
     quantity: data.quantity,
@@ -271,6 +335,7 @@ async function createLineItem(data) {
     vendorId: data.vendorId || null,
     manufacturerId: data.manufacturerId || null,
     productId: data.productId || null,
+    productVariationId: data.productVariationId || null,
     modelNumber: data.modelNumber || null,
     allowance: data.allowance || null,
     orderedDate: data.orderedDate || null,
@@ -303,6 +368,48 @@ async function updateLineItem(id, data) {
     };
   }
 
+  const updateData = { ...data };
+
+  if (
+    updateData.categoryId &&
+    updateData.categoryId !== existing.Item.categoryId
+  ) {
+    const targetCategory = await ddb.send(
+      new GetCommand({
+        TableName: CATEGORIES_TABLE,
+        Key: { id: updateData.categoryId },
+      }),
+    );
+
+    if (!targetCategory.Item) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ message: "Target category not found" }),
+      };
+    }
+
+    if (targetCategory.Item.projectId !== existing.Item.projectId) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({
+          message: "Cannot move line item to a category in another project",
+        }),
+      };
+    }
+
+    if (
+      updateData.sequence === undefined ||
+      updateData.sequence === null ||
+      !Number.isFinite(updateData.sequence)
+    ) {
+      updateData.sequence = await getNextSequenceForCategory(
+        updateData.categoryId,
+      );
+    }
+  }
+
   const setExpressions = [];
   const removeExpressions = [];
   const expressionAttributeNames = {};
@@ -314,7 +421,6 @@ async function updateLineItem(id, data) {
 
   const IMMUTABLE_FIELDS = [
     "id",
-    "categoryId",
     "projectId",
     "createdAt",
     "updatedAt",
@@ -323,15 +429,15 @@ async function updateLineItem(id, data) {
     "manufacturerName",
   ];
 
-  Object.keys(data).forEach((key) => {
+  Object.keys(updateData).forEach((key) => {
     if (IMMUTABLE_FIELDS.includes(key)) return;
     const attrName = `#${key}`;
     const attrValue = `:${key}`;
-    if (data[key] !== null && data[key] !== undefined) {
+    if (updateData[key] !== null && updateData[key] !== undefined) {
       setExpressions.push(`${attrName} = ${attrValue}`);
       expressionAttributeNames[attrName] = key;
-      expressionAttributeValues[attrValue] = data[key];
-    } else if (data[key] === null) {
+      expressionAttributeValues[attrValue] = updateData[key];
+    } else if (updateData[key] === null) {
       removeExpressions.push(attrName);
       expressionAttributeNames[attrName] = key;
     }
@@ -343,11 +449,15 @@ async function updateLineItem(id, data) {
   }
 
   // Recalculate totalCost if quantity or unitCost changed
-  if (data.quantity !== undefined || data.unitCost !== undefined) {
+  if (updateData.quantity !== undefined || updateData.unitCost !== undefined) {
     const newQuantity =
-      data.quantity !== undefined ? data.quantity : existing.Item.quantity;
+      updateData.quantity !== undefined
+        ? updateData.quantity
+        : existing.Item.quantity;
     const newUnitCost =
-      data.unitCost !== undefined ? data.unitCost : existing.Item.unitCost;
+      updateData.unitCost !== undefined
+        ? updateData.unitCost
+        : existing.Item.unitCost;
     if (newQuantity !== undefined && newUnitCost !== undefined) {
       setExpressions.push("#totalCost = :totalCost");
       expressionAttributeNames["#totalCost"] = "totalCost";
@@ -419,6 +529,8 @@ async function createLineItemOption(lineItemId, data) {
     id: randomUUID(),
     lineItemId,
     productId: data.productId,
+    productVariationId: data.productVariationId || null,
+    modelNumber: data.modelNumber || null,
     unitCost: data.unitCost,
     isSelected: data.isSelected || false,
     createdAt: new Date().toISOString(),
@@ -444,6 +556,21 @@ async function updateLineItemOption(optionId, data) {
     expressionAttributeNames["#unitCost"] = "unitCost";
     expressionAttributeValues[":unitCost"] = data.unitCost;
   }
+  if (data.productId !== undefined) {
+    updateParts.push("#productId = :productId");
+    expressionAttributeNames["#productId"] = "productId";
+    expressionAttributeValues[":productId"] = data.productId;
+  }
+  if (data.productVariationId !== undefined) {
+    updateParts.push("#productVariationId = :productVariationId");
+    expressionAttributeNames["#productVariationId"] = "productVariationId";
+    expressionAttributeValues[":productVariationId"] = data.productVariationId;
+  }
+  if (data.modelNumber !== undefined) {
+    updateParts.push("#modelNumber = :modelNumber");
+    expressionAttributeNames["#modelNumber"] = "modelNumber";
+    expressionAttributeValues[":modelNumber"] = data.modelNumber;
+  }
   if (data.isSelected !== undefined) {
     updateParts.push("#isSelected = :isSelected");
     expressionAttributeNames["#isSelected"] = "isSelected";
@@ -467,7 +594,12 @@ async function updateLineItemOption(optionId, data) {
 }
 
 async function selectLineItemOption(lineItemId, data) {
-  const { productId, unitCost } = data;
+  const {
+    productId,
+    productVariationId = null,
+    modelNumber = null,
+    unitCost,
+  } = data;
 
   const queryResult = await ddb.send(
     new QueryCommand({
@@ -478,9 +610,11 @@ async function selectLineItemOption(lineItemId, data) {
     }),
   );
   const existingOptions = queryResult.Items || [];
-  const matchingOption = existingOptions.find(
-    (opt) => opt.productId === productId,
-  );
+  const isSameOption = (option) =>
+    option.productId === productId &&
+    (option.productVariationId || null) === (productVariationId || null);
+
+  const matchingOption = existingOptions.find((opt) => isSameOption(opt));
 
   let selectedOption;
   if (matchingOption) {
@@ -489,15 +623,19 @@ async function selectLineItemOption(lineItemId, data) {
         TableName: LINEITEMOPTIONS_TABLE,
         Key: { id: matchingOption.id },
         UpdateExpression:
-          "SET #isSelected = :isSelected, #unitCost = :unitCost, #updatedAt = :updatedAt",
+          "SET #isSelected = :isSelected, #unitCost = :unitCost, #productVariationId = :productVariationId, #modelNumber = :modelNumber, #updatedAt = :updatedAt",
         ExpressionAttributeNames: {
           "#isSelected": "isSelected",
           "#unitCost": "unitCost",
+          "#productVariationId": "productVariationId",
+          "#modelNumber": "modelNumber",
           "#updatedAt": "updatedAt",
         },
         ExpressionAttributeValues: {
           ":isSelected": true,
           ":unitCost": unitCost,
+          ":productVariationId": productVariationId,
+          ":modelNumber": modelNumber,
           ":updatedAt": new Date().toISOString(),
         },
         ReturnValues: "ALL_NEW",
@@ -509,6 +647,8 @@ async function selectLineItemOption(lineItemId, data) {
       id: randomUUID(),
       lineItemId,
       productId,
+      productVariationId,
+      modelNumber,
       unitCost,
       isSelected: true,
       createdAt: new Date().toISOString(),
@@ -524,7 +664,7 @@ async function selectLineItemOption(lineItemId, data) {
 
   // Deselect all other options
   const deselectPromises = existingOptions
-    .filter((opt) => opt.productId !== productId && opt.isSelected)
+    .filter((opt) => !isSameOption(opt) && opt.isSelected)
     .map((opt) =>
       ddb.send(
         new UpdateCommand({
