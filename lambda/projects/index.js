@@ -685,11 +685,12 @@ async function revokeProjectShare(projectId) {
     }),
   );
 
+  // Idempotent — if no share exists treat as already revoked (success)
   if (!result.Items?.length) {
     return {
-      statusCode: 404,
+      statusCode: 204,
       headers,
-      body: JSON.stringify({ message: "No active share found" }),
+      body: "",
     };
   }
 
@@ -929,6 +930,36 @@ async function getReviewData(shareToken, pin) {
     });
   }
 
+  // Collect unique variation IDs from line items so we can resolve the right
+  // image, color, finish, and model number for multi-variation products
+  const variationIdSet = new Set();
+  lineItems.forEach(
+    (li) => li.productVariationId && variationIdSet.add(li.productVariationId),
+  );
+  optionResults
+    .flat()
+    .forEach(
+      (opt) =>
+        opt.productVariationId && variationIdSet.add(opt.productVariationId),
+    );
+
+  let variationsMap = {};
+  if (variationIdSet.size > 0) {
+    const varKeys = [...variationIdSet].map((id) => ({ id }));
+    const varBatch = await ddb.send(
+      new BatchGetCommand({
+        RequestItems: {
+          "MaterialsSelection-ProductVariations": { Keys: varKeys },
+        },
+      }),
+    );
+    (
+      varBatch.Responses?.["MaterialsSelection-ProductVariations"] || []
+    ).forEach((v) => {
+      variationsMap[v.id] = v;
+    });
+  }
+
   // Build enriched line items grouped by category
   const categoriesMap = {};
   categories.forEach((c) => {
@@ -956,6 +987,9 @@ async function getReviewData(shareToken, pin) {
           ? manufacturersMap[productsMap[li.productId].manufacturerId] || null
           : null,
       vendor: li.vendorId ? vendorsMap[li.vendorId] || null : null,
+      selectedVariation: li.productVariationId
+        ? variationsMap[li.productVariationId] || null
+        : null,
       options,
     };
   });

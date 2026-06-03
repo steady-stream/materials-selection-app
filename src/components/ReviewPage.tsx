@@ -47,13 +47,7 @@ function fmt(value?: number | null): string {
 }
 
 // Color-coded status badge matching PPT conventions
-function StatusBadge({
-  status,
-  tier,
-}: {
-  status?: string | null;
-  tier?: string | null;
-}) {
+function StatusBadge({ status }: { status?: string | null }) {
   const s = (status ?? "selected").toLowerCase();
   let colorClass = "bg-[#1F4788]";
   if (s === "installed") colorClass = "bg-[#2D9F48]";
@@ -64,13 +58,11 @@ function StatusBadge({
   else if (s === "no selection") colorClass = "bg-[#DC2626]";
   else if (s.startsWith("option")) colorClass = "bg-[#D97706]";
 
-  const tierLabel = tier ? ` · ${tier.toUpperCase()}` : "";
   return (
     <span
       className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-bold text-white whitespace-nowrap ${colorClass}`}
     >
       {status ?? "Selected"}
-      {tierLabel}
     </span>
   );
 }
@@ -260,16 +252,11 @@ function AlternateOptions({
                 )}
 
                 <div className="flex-1 min-w-0">
-                  {/* Product name + tier badge on same row */}
-                  <div className="flex items-start justify-between gap-2">
+                  {/* Product name */}
+                  <div className="flex items-start gap-2">
                     <p className="text-xs font-semibold text-gray-800 leading-snug">
                       {product.name}
                     </p>
-                    {product.tier && (
-                      <span className="flex-shrink-0 text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">
-                        {product.tier}
-                      </span>
-                    )}
                   </div>
                   {product.description && (
                     <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">
@@ -354,6 +341,21 @@ function ProductCard({ li }: { li: ReviewLineItem }) {
       : `https://${productUrl}`
     : null;
 
+  // Resolve variation-level fields — prefer selected variation over product base values
+  const variation = li.selectedVariation;
+  const displayImageUrl = variation?.imageUrl || li.product?.imageUrl;
+  const displayModelNumber =
+    variation?.effectiveModelNumber ||
+    variation?.modelNumber ||
+    li.product?.modelNumber;
+  const displayColor = variation?.color || li.product?.color;
+  const displayFinish = variation?.finish || li.product?.finish;
+
+  // Variance: positive = total exceeds allowance (over budget), negative = under
+  const hasAllowance = li.allowance != null && li.allowance > 0;
+  const variance =
+    hasAllowance && li.totalCost != null ? li.totalCost - li.allowance! : null;
+
   return (
     <>
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
@@ -363,7 +365,7 @@ function ProductCard({ li }: { li: ReviewLineItem }) {
             {li.name}
           </h3>
           <div className="flex-shrink-0">
-            <StatusBadge status={li.status} tier={li.product?.tier} />
+            <StatusBadge status={li.status} />
           </div>
         </div>
 
@@ -380,8 +382,8 @@ function ProductCard({ li }: { li: ReviewLineItem }) {
                 value={(li.product?.description || li.material) ?? ""}
               />
             )}
-            {li.product?.modelNumber && (
-              <DetailRow label="Model #" value={li.product.modelNumber} />
+            {displayModelNumber && (
+              <DetailRow label="Model #" value={displayModelNumber} />
             )}
             {li.manufacturer?.name && (
               <DetailRow label="Manufacturer" value={li.manufacturer.name} />
@@ -389,11 +391,9 @@ function ProductCard({ li }: { li: ReviewLineItem }) {
             {li.vendor?.name && (
               <DetailRow label="Vendor" value={li.vendor.name} />
             )}
-            {li.product?.color && (
-              <DetailRow label="Color" value={li.product.color} />
-            )}
-            {li.product?.finish && (
-              <DetailRow label="Finish" value={li.product.finish} />
+            {displayColor && <DetailRow label="Color" value={displayColor} />}
+            {displayFinish && (
+              <DetailRow label="Finish" value={displayFinish} />
             )}
             {li.product?.collection && (
               <DetailRow label="Collection" value={li.product.collection} />
@@ -420,6 +420,31 @@ function ProductCard({ li }: { li: ReviewLineItem }) {
                   {fmt(li.totalCost)}
                 </span>
               </div>
+              {hasAllowance && (
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-xs text-gray-400">Allowance</span>
+                  <span className="text-xs font-semibold text-gray-700">
+                    {fmt(li.allowance)}
+                  </span>
+                </div>
+              )}
+              {variance != null && (
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-xs text-gray-400">Variance</span>
+                  <span
+                    className={`text-xs font-bold ${
+                      variance > 0
+                        ? "text-red-600"
+                        : variance < 0
+                          ? "text-green-600"
+                          : "text-gray-500"
+                    }`}
+                  >
+                    {variance > 0 ? "+" : ""}
+                    {fmt(variance)}
+                  </span>
+                </div>
+              )}
             </div>
 
             {safeUrl && (
@@ -435,7 +460,7 @@ function ProductCard({ li }: { li: ReviewLineItem }) {
           </div>
 
           {/* Right: product image — click to expand */}
-          {li.product?.imageUrl && (
+          {displayImageUrl && (
             <button
               type="button"
               onClick={() => setImgModal(true)}
@@ -443,28 +468,13 @@ function ProductCard({ li }: { li: ReviewLineItem }) {
               aria-label="View full image"
             >
               <img
-                src={li.product.imageUrl}
-                alt={li.product.name}
+                src={displayImageUrl}
+                alt={li.product?.name ?? "Product"}
                 className="w-full h-full object-contain p-1"
               />
             </button>
           )}
         </div>
-
-        {/* Allowance footer — navy bar matching PPT */}
-        {li.allowance != null && li.allowance > 0 && (
-          <div
-            className="flex items-center justify-between px-6 py-2.5"
-            style={{ background: "#1F4788" }}
-          >
-            <span className="text-xs font-bold text-white uppercase tracking-widest">
-              Allowance
-            </span>
-            <span className="text-sm font-bold text-white">
-              {fmt(li.allowance)}
-            </span>
-          </div>
-        )}
 
         {/* Alternate options collapsible */}
         {li.options && li.options.length > 0 && (
@@ -477,7 +487,7 @@ function ProductCard({ li }: { li: ReviewLineItem }) {
       </div>
 
       {/* Expanded image modal */}
-      {imgModal && li.product?.imageUrl && (
+      {imgModal && displayImageUrl && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
           onClick={() => setImgModal(false)}
@@ -495,8 +505,8 @@ function ProductCard({ li }: { li: ReviewLineItem }) {
               ✕
             </button>
             <img
-              src={li.product.imageUrl}
-              alt={li.product.name}
+              src={displayImageUrl!}
+              alt={li.product?.name ?? "Product"}
               className="max-w-full max-h-[85vh] object-contain p-4"
             />
           </div>
@@ -514,6 +524,8 @@ function SectionPane({ category, items }: CategoryGroup) {
     (sum, li) => sum + (li.allowance ?? 0),
     0,
   );
+  const totalVariance =
+    totalAllowance > 0 ? totalBudget - totalAllowance : null;
 
   return (
     <div>
@@ -547,6 +559,23 @@ function SectionPane({ category, items }: CategoryGroup) {
               </span>
             </p>
           )}
+          {totalVariance != null && (
+            <p className="text-blue-300 text-xs mt-0.5">
+              Variance{" "}
+              <span
+                className={`font-bold ml-1 ${
+                  totalVariance > 0
+                    ? "text-red-200"
+                    : totalVariance < 0
+                      ? "text-green-200"
+                      : "text-white"
+                }`}
+              >
+                {totalVariance > 0 ? "+" : ""}
+                {fmt(totalVariance)}
+              </span>
+            </p>
+          )}
         </div>
       </div>
 
@@ -566,6 +595,15 @@ function ReviewContent({ data }: { data: ReviewData }) {
   const { project, lineItems, categories } = data;
   const groups = groupByCategory(lineItems, categories);
   const [activeTab, setActiveTab] = useState(0);
+  const grandTotal = lineItems.reduce(
+    (sum, li) => sum + (li.totalCost ?? 0),
+    0,
+  );
+  const grandAllowance = lineItems.reduce(
+    (sum, li) => sum + (li.allowance ?? 0),
+    0,
+  );
+  const grandVariance = grandAllowance > 0 ? grandTotal - grandAllowance : null;
 
   const expiresFormatted = data.expiresAt
     ? new Intl.DateTimeFormat("en-US", { dateStyle: "long" }).format(
@@ -577,10 +615,8 @@ function ReviewContent({ data }: { data: ReviewData }) {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      {/* Presentation header — navy, like PPT cover */}
       <div style={{ background: "#1F4788" }}>
-        <div className="max-w-5xl mx-auto px-6 py-6 flex items-center gap-6">
-          {/* Logo */}
+        <div className="max-w-5xl mx-auto px-6 py-6 flex items-start gap-6">
           <div className="flex-shrink-0 hidden sm:block">
             <img
               src="/MegaProsLogo.png"
@@ -590,10 +626,8 @@ function ReviewContent({ data }: { data: ReviewData }) {
             />
           </div>
 
-          {/* Divider */}
           <div className="hidden sm:block w-px h-10 bg-blue-600 flex-shrink-0" />
 
-          {/* Project info */}
           <div className="flex-1 min-w-0">
             <p className="text-blue-400 text-xs uppercase tracking-widest mb-0.5">
               Materials Selection Review
@@ -616,11 +650,52 @@ function ReviewContent({ data }: { data: ReviewData }) {
                 </span>
               )}
             </div>
+
+            {groups.length > 0 && (
+              <div className="flex flex-wrap gap-x-6 gap-y-1 mt-3">
+                <div>
+                  <p className="text-blue-400 text-[10px] uppercase tracking-widest">
+                    Total
+                  </p>
+                  <p className="text-white text-sm font-bold">
+                    {fmt(grandTotal)}
+                  </p>
+                </div>
+                {grandAllowance > 0 && (
+                  <div>
+                    <p className="text-blue-400 text-[10px] uppercase tracking-widest">
+                      Allowance
+                    </p>
+                    <p className="text-white text-sm font-bold">
+                      {fmt(grandAllowance)}
+                    </p>
+                  </div>
+                )}
+                {grandVariance != null && (
+                  <div>
+                    <p className="text-blue-400 text-[10px] uppercase tracking-widest">
+                      Variance
+                    </p>
+                    <p
+                      className={`text-sm font-bold ${
+                        grandVariance > 0
+                          ? "text-red-200"
+                          : grandVariance < 0
+                            ? "text-green-200"
+                            : "text-white"
+                      }`}
+                    >
+                      {grandVariance > 0 ? "+" : ""}
+                      {fmt(grandVariance)}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* Expiry */}
           {expiresFormatted && (
-            <div className="flex-shrink-0 text-right hidden md:block">
+            <div className="flex-shrink-0 text-right hidden md:block pt-0.5">
               <p className="text-blue-400 text-xs">Valid until</p>
               <p className="text-blue-200 text-xs font-semibold">
                 {expiresFormatted}
@@ -630,25 +705,29 @@ function ReviewContent({ data }: { data: ReviewData }) {
         </div>
       </div>
 
-      {/* Section tab bar */}
       {groups.length > 0 && (
-        <div className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
+        <div className="bg-white border-b-2 border-gray-200 sticky top-0 z-10 shadow-md">
           <div className="max-w-5xl mx-auto px-6">
+            {groups.length > 1 && (
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest pt-2 pb-0">
+                Sections ({groups.length})
+              </p>
+            )}
             <nav
-              className="flex overflow-x-auto"
+              className="flex overflow-x-auto gap-1"
               style={{ scrollbarWidth: "none" }}
             >
               {groups.map(({ category }, idx) => (
                 <button
                   key={category.id}
                   onClick={() => setActiveTab(idx)}
-                  className={`flex-shrink-0 px-5 py-3.5 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${
+                  className={`flex-shrink-0 px-5 py-3.5 text-sm font-bold border-b-4 transition-all whitespace-nowrap ${
                     activeTab === idx
-                      ? "text-[#1F4788] border-[#1F4788]"
-                      : "text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300"
+                      ? "text-[#1F4788] border-[#1F4788] bg-blue-50"
+                      : "text-gray-500 border-transparent hover:text-[#1F4788] hover:border-blue-300 hover:bg-blue-50/50"
                   }`}
                 >
-                  {category.name}
+                  {idx + 1}. {category.name}
                 </button>
               ))}
             </nav>
@@ -656,7 +735,6 @@ function ReviewContent({ data }: { data: ReviewData }) {
         </div>
       )}
 
-      {/* Active section */}
       <div className="max-w-5xl mx-auto px-6 py-6">
         {groups.length === 0 ? (
           <div className="text-center py-20">

@@ -1,6 +1,6 @@
 # Materials Selection App - Current Status (Canonical)
 
-Last updated: 2026-06-03 (evening)
+Last updated: 2026-06-03 (late night)
 Owner: APIA Consulting
 Scope: WebPrototype repository state + latest handoff/deploy evidence
 
@@ -93,6 +93,24 @@ Primary evidence used:
   - Test deploy invalidations: `I3TLVAPT1XUMA8789WM7OE3MW0`, `IBRW2CDG7GIJG7N4NQ4URKF88J`
   - Production deploy invalidations: `I3FHAEH7YZ60M5TRA3FFPSB2EU`, `I62M8GSHPXAH693Z29PKDYDPUO`
   - Production URL verified after release: https://d377ynyh0ngsji.cloudfront.net
+
+### Release update (2026-06-03 late night)
+
+- Variations rollout completed across catalog and project selection behavior:
+  - Backend review payload now includes selected variation details per line item
+  - Variation image/model data now remains consistent from project selection through downstream rendering
+- Salesforce opportunity workflow improvement confirmed in delivered branch:
+  - Selection Coordinator flag filter, stage filter, and opportunity-name search all active in the selection flow
+- PowerPoint and Review refinements completed and deployed:
+  - Project- and section-level allowance/variance rollups included in presentation output and review context
+  - Product-level allowance/variance presentation cleaned up for clearer client-facing output
+  - PowerPoint export button now shows in-progress state to prevent duplicate clicks
+- Projects share endpoint hardening completed:
+  - Revoke-share path made idempotent (safe no-op behavior when no active share exists)
+- Deployment evidence:
+  - Test frontend deploy invalidation: `I51WWXRZW177WCEK3JLHCY6IG0` (distribution `E2CO2DGE8F4YUE`)
+  - Latest test URL verified after deploy: https://mpmaterials.apiaconsulting.com
+  - Corresponding production deploy for this change set was executed earlier in the same cycle
 
 ### Completed and deployed (latest confirmed)
 

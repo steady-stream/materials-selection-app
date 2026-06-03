@@ -36,11 +36,14 @@ interface CategorySection {
     }>;
   }>;
   totalBudget: number;
+  totalAllowance: number;
 }
 
 interface ProjectPresentationData {
   project: Project;
   categorySections: CategorySection[];
+  totalBudget: number;
+  totalAllowance: number;
 }
 
 /**
@@ -185,6 +188,7 @@ async function fetchProjectData(
         category: item.category,
         lineItems: [],
         totalBudget: 0,
+        totalAllowance: 0,
       });
     }
 
@@ -197,11 +201,24 @@ async function fetchProjectData(
       options: item.options,
     });
     section.totalBudget += item.lineItem.totalCost || 0;
+    section.totalAllowance += item.lineItem.allowance || 0;
   });
+
+  const categorySections = Array.from(categoryMap.values());
+  const totalBudget = categorySections.reduce(
+    (sum, section) => sum + section.totalBudget,
+    0,
+  );
+  const totalAllowance = categorySections.reduce(
+    (sum, section) => sum + section.totalAllowance,
+    0,
+  );
 
   return {
     project,
-    categorySections: Array.from(categoryMap.values()),
+    categorySections,
+    totalBudget,
+    totalAllowance,
   };
 }
 
@@ -209,18 +226,58 @@ async function fetchProjectData(
  * Phase 4: Helper function to fetch and convert image to base64 data URI
  */
 async function fetchImageAsBase64(url: string): Promise<string> {
+  // Prefer the browser image pipeline first. Some remote S3-hosted images can
+  // render fine in <img> tags but be unreliable through fetch/blob conversion.
   try {
-    const response = await fetch(url);
-    const blob = await response.blob();
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
+    return await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+
+      img.onload = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = img.naturalWidth || img.width;
+          canvas.height = img.naturalHeight || img.height;
+
+          const context = canvas.getContext("2d");
+          if (!context) {
+            reject(
+              new Error("Could not create canvas context for image conversion"),
+            );
+            return;
+          }
+
+          context.drawImage(img, 0, 0);
+          resolve(canvas.toDataURL("image/jpeg"));
+        } catch (error) {
+          reject(error);
+        }
+      };
+
+      img.onerror = () => {
+        reject(new Error(`Image element failed to load: ${url}`));
+      };
+
+      img.src = url;
     });
-  } catch (error) {
-    console.warn(`Failed to load image from ${url}:`, error);
-    throw error;
+  } catch (imgError) {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Image request failed with status ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      return await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch (fetchError) {
+      console.warn(`Failed to load image from ${url}:`, imgError, fetchError);
+      throw fetchError;
+    }
   }
 }
 
@@ -231,8 +288,12 @@ async function fetchImageAsBase64(url: string): Promise<string> {
 async function generateCoverSlide(
   pptx: pptxgen,
   project: Project,
+  totalBudget: number,
+  totalAllowance: number,
 ): Promise<void> {
   const slide = pptx.addSlide();
+  const totalVariance =
+    totalAllowance > 0 ? totalBudget - totalAllowance : null;
 
   // Blue gradient background on left 25%
   slide.addShape(pptx.ShapeType.rect, {
@@ -290,6 +351,44 @@ async function generateCoverSlide(
     align: "right",
     valign: "bottom",
   });
+
+  // Project totals in the lower right, above selector info.
+  const projectTotals: string[] = [
+    `Project Total: $${totalBudget.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`,
+  ];
+  if (totalAllowance > 0) {
+    projectTotals.push(
+      `Allowance: $${totalAllowance.toLocaleString("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}`,
+    );
+  }
+  if (totalVariance != null) {
+    projectTotals.push(
+      `Variance: ${totalVariance > 0 ? "+" : ""}$${Math.abs(
+        totalVariance,
+      ).toLocaleString("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}`,
+    );
+  }
+
+  slide.addText(projectTotals.join("\n"), {
+    x: 6.2,
+    y: 5.65,
+    w: 3.3,
+    h: 0.95,
+    fontSize: 11,
+    fontFace: "Calibri",
+    color: "363636",
+    align: "right",
+    valign: "bottom",
+  });
 }
 
 /**
@@ -300,8 +399,11 @@ function generateSectionSlide(
   pptx: pptxgen,
   category: Category,
   totalBudget: number,
+  totalAllowance: number,
 ): void {
   const slide = pptx.addSlide();
+  const totalVariance =
+    totalAllowance > 0 ? totalBudget - totalAllowance : null;
 
   // Blue gradient background on top 75%
   slide.addShape(pptx.ShapeType.rect, {
@@ -326,17 +428,37 @@ function generateSectionSlide(
   });
 
   // Section info below blue area
-  const budgetText = `Total Budget: $${totalBudget.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+  const sectionSummary = [
+    `Total Budget: $${totalBudget.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`,
+  ];
+  if (totalAllowance > 0) {
+    sectionSummary.push(
+      `Allowance: $${totalAllowance.toLocaleString("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}`,
+    );
+  }
+  if (totalVariance != null) {
+    sectionSummary.push(
+      `Variance: ${totalVariance > 0 ? "+" : ""}$${Math.abs(
+        totalVariance,
+      ).toLocaleString("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}`,
+    );
+  }
 
-  slide.addText(budgetText, {
+  slide.addText(sectionSummary.join(" | "), {
     x: 0.5,
     y: 6.0,
     w: 9,
     h: 0.5,
-    fontSize: 18,
+    fontSize: 16,
     fontFace: "Calibri",
     align: "center",
     color: "363636",
@@ -370,6 +492,8 @@ async function generateProductSlide(
   statusText?: string,
 ): Promise<void> {
   const slide = pptx.addSlide();
+  const variance =
+    lineItem.allowance != null ? lineItem.totalCost - lineItem.allowance : null;
 
   // Blue bar on bottom 10%
   slide.addShape(pptx.ShapeType.rect, {
@@ -382,13 +506,21 @@ async function generateProductSlide(
 
   // Allowance in blue footer bar
   if (lineItem.allowance) {
-    const allowanceText = `Allowance: $${lineItem.allowance.toLocaleString()}`;
+    const allowanceParts = [
+      `Allowance: $${lineItem.allowance.toLocaleString()}`,
+    ];
+    if (variance != null) {
+      allowanceParts.push(
+        `Variance: ${variance > 0 ? "+" : ""}$${Math.abs(variance).toLocaleString()}`,
+      );
+    }
+    const allowanceText = allowanceParts.join(" | ");
     slide.addText(allowanceText, {
       x: 0.5,
       y: 6.8,
       w: 9,
       h: 0.65,
-      fontSize: 20,
+      fontSize: 18,
       fontFace: "Calibri",
       bold: true,
       color: "FFFFFF",
@@ -441,10 +573,9 @@ async function generateProductSlide(
     valign: "top",
   });
 
-  // Status upper right with tier if available (keep original case)
+  // Status upper right (keep original case)
   const baseStatus = statusText || lineItem.status || "Selected";
-  const tierText = product?.tier ? ` - ${product.tier.toUpperCase()}` : "";
-  const fullStatusText = `${baseStatus}${tierText}`;
+  const fullStatusText = baseStatus;
 
   // Determine status color
   let statusColor = "1F4788"; // Default blue
@@ -493,6 +624,11 @@ async function generateProductSlide(
     detailsH = 4.35; // Reduce height to avoid overlapping URL at bottom
   }
 
+  // Resolve the selected variation (catalog hydrates product with all variations)
+  const selectedVariation = lineItem.productVariationId
+    ? product?.variations?.find((v) => v.id === lineItem.productVariationId)
+    : product?.variations?.[0]; // fall back to default/first variation
+
   // Build details text array
   const detailsLines: string[] = [];
 
@@ -505,8 +641,13 @@ async function generateProductSlide(
     detailsLines.push(`Description: ${description}`);
   }
 
-  if (product?.modelNumber) {
-    detailsLines.push(`Model: ${product.modelNumber}`);
+  // Prefer variation's effectiveModelNumber so the per-variation model number shows
+  const modelNumber =
+    selectedVariation?.effectiveModelNumber ||
+    selectedVariation?.modelNumber ||
+    product?.modelNumber;
+  if (modelNumber) {
+    detailsLines.push(`Model: ${modelNumber}`);
   }
 
   if (manufacturer) {
@@ -517,12 +658,15 @@ async function generateProductSlide(
     detailsLines.push(`Vendor: ${vendor.name}`);
   }
 
-  if (product?.color) {
-    detailsLines.push(`Color: ${product.color}`);
+  // Prefer variation-level color/finish — these are what was actually selected
+  const color = selectedVariation?.color || product?.color;
+  const finish = selectedVariation?.finish || product?.finish;
+  if (color) {
+    detailsLines.push(`Color: ${color}`);
   }
 
-  if (product?.finish) {
-    detailsLines.push(`Finish: ${product.finish}`);
+  if (finish) {
+    detailsLines.push(`Finish: ${finish}`);
   }
 
   if (product?.collection) {
@@ -559,12 +703,15 @@ async function generateProductSlide(
     valign: "top",
   });
 
+  // Product image: use selected variation's imageUrl if available
+  const imageUrl = selectedVariation?.imageUrl || product?.imageUrl;
+
   // Product image or placeholder (below details)
   try {
     let imageData: string;
-    if (product?.imageUrl) {
+    if (imageUrl) {
       try {
-        imageData = await fetchImageAsBase64(product.imageUrl);
+        imageData = await fetchImageAsBase64(imageUrl);
       } catch (error) {
         console.warn(`Failed to load product image, using placeholder:`, error);
         imageData = await fetchImageAsBase64("/SubstituteImage.png");
@@ -604,12 +751,22 @@ export async function generateProjectPPTX(projectId: string): Promise<void> {
     pptx.title = data.project.name;
 
     // Generate cover slide with logo
-    await generateCoverSlide(pptx, data.project);
+    await generateCoverSlide(
+      pptx,
+      data.project,
+      data.totalBudget,
+      data.totalAllowance,
+    );
 
     // Generate category sections with products
     for (const section of data.categorySections) {
       // Section divider slide
-      generateSectionSlide(pptx, section.category, section.totalBudget);
+      generateSectionSlide(
+        pptx,
+        section.category,
+        section.totalBudget,
+        section.totalAllowance,
+      );
 
       // Product slides for this category
       for (const item of section.lineItems) {

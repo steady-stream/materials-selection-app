@@ -68,6 +68,7 @@ const ProjectDetail = () => {
   const [showProjectModal, setShowProjectModal] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [savingProject, setSavingProject] = useState(false);
+  const [isExportingPowerPoint, setIsExportingPowerPoint] = useState(false);
 
   // Share link state
   const [showShareModal, setShowShareModal] = useState(false);
@@ -452,6 +453,32 @@ const ProjectDetail = () => {
     }
   };
 
+  // Revoke then immediately create a fresh share so the user can see the new PIN.
+  const handleRecreateShare = async () => {
+    if (
+      !project ||
+      !window.confirm(
+        "This will generate a new link and PIN. The current link will stop working immediately. Continue?",
+      )
+    )
+      return;
+    setShareLoading(true);
+    try {
+      await projectService.revokeShare(project.id);
+      const result = await projectService.createShare(project.id);
+      setShareCreated(result);
+      setShareStatus({
+        active: true,
+        expiresAt: result.expiresAt,
+        shareUrl: result.shareUrl,
+      });
+    } catch {
+      alert("Failed to generate new share link. Please try again.");
+    } finally {
+      setShareLoading(false);
+    }
+  };
+
   const handleSaveProject = async () => {
     if (!editingProject) return;
     setSavingProject(true);
@@ -478,6 +505,17 @@ const ProjectDetail = () => {
       console.error("Error updating project:", err);
     } finally {
       setSavingProject(false);
+    }
+  };
+
+  const handleExportPowerPoint = async () => {
+    if (!project || isExportingPowerPoint) return;
+
+    setIsExportingPowerPoint(true);
+    try {
+      await generateProjectPPTX(project.id);
+    } finally {
+      setIsExportingPowerPoint(false);
     }
   };
 
@@ -2290,10 +2328,17 @@ const ProjectDetail = () => {
           <div className="flex flex-col gap-2 flex-shrink-0">
             <div className="flex items-center gap-2">
               <button
-                onClick={() => generateProjectPPTX(project.id)}
-                className="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700"
+                onClick={handleExportPowerPoint}
+                disabled={isExportingPowerPoint}
+                className={`bg-green-600 text-white px-2 py-1 rounded text-xs ${
+                  isExportingPowerPoint
+                    ? "opacity-70 cursor-not-allowed"
+                    : "hover:bg-green-700"
+                }`}
               >
-                📊 Export PowerPoint
+                {isExportingPowerPoint
+                  ? "⏳ Generating PowerPoint..."
+                  : "📊 Export PowerPoint"}
               </button>
               <button
                 onClick={handleOpenShareModal}
@@ -7523,7 +7568,7 @@ const ProjectDetail = () => {
                   </p>
                 </div>
               ) : shareStatus?.active ? (
-                /* Active share exists — show status + revoke option */
+                /* Active share exists — show status + revoke/recreate options */
                 <div className="space-y-4">
                   <div className="bg-blue-50 border border-blue-200 rounded p-4">
                     <p className="text-xs font-semibold text-blue-800 mb-1">
@@ -7552,10 +7597,19 @@ const ProjectDetail = () => {
                         }).format(new Date(shareStatus.expiresAt))}
                       </p>
                     )}
-                    <p className="text-xs text-blue-600 mt-1">
-                      The PIN was shown when the link was first created.
+                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 mt-2">
+                      PIN is not stored — if you need to share it again,
+                      generate a new link below.
                     </p>
                   </div>
+
+                  <button
+                    onClick={handleRecreateShare}
+                    disabled={shareLoading}
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs py-2 rounded disabled:opacity-50"
+                  >
+                    Generate New Link + PIN
+                  </button>
 
                   <button
                     onClick={handleRevokeShare}

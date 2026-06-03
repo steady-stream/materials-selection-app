@@ -484,6 +484,7 @@ export interface ReviewLineItem extends LineItem {
   product: Product | null;
   manufacturer: Manufacturer | null;
   vendor: Vendor | null;
+  selectedVariation: ProductVariation | null;
   options: Array<{
     option: LineItemOption;
     product: Product;
