@@ -88,6 +88,43 @@ const mapApiVariationsToInputs = (
       imageUrl: variation.imageUrl || "",
     }));
 
+const getVariationModelLabel = (
+  variation: ProductVariationInput,
+  baseModelNumber: string,
+) => {
+  return variation.modelNumber || baseModelNumber || "(inherits base model)";
+};
+
+const sanitizeVariationSkuMap = (variationSkus: Record<string, string>) => {
+  const cleaned = Object.fromEntries(
+    Object.entries(variationSkus).filter(
+      ([variationId, sku]) => variationId && (sku || "").trim(),
+    ),
+  );
+  return Object.keys(cleaned).length > 0 ? cleaned : undefined;
+};
+
+const buildVariationSkuMapForSavedProduct = (
+  savedProduct: Product,
+  variationInputs: ProductVariationInput[],
+  skuByEditorIndex: Record<number, string>,
+): Record<string, string> | undefined => {
+  const savedVariations = (savedProduct.variations || [])
+    .slice()
+    .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+
+  const mapped: Record<string, string> = {};
+  variationInputs.forEach((_, index) => {
+    const sku = (skuByEditorIndex[index] || "").trim();
+    const variationId = savedVariations[index]?.id;
+    if (sku && variationId) {
+      mapped[variationId] = sku;
+    }
+  });
+
+  return sanitizeVariationSkuMap(mapped);
+};
+
 const validateVariations = (
   variations: ProductVariationInput[],
   baseModelNumber: string,
@@ -264,6 +301,9 @@ const ProductList = () => {
     cost: 0,
     sku: "",
   });
+  const [newVendorVariationSkus, setNewVendorVariationSkus] = useState<
+    Record<string, string>
+  >({});
   const [openProductMenu, setOpenProductMenu] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{
     top?: number;
@@ -311,6 +351,9 @@ const ProductList = () => {
   const [primaryVendorId, setPrimaryVendorId] = useState("");
   const [primaryVendorSku, setPrimaryVendorSku] = useState("");
   const [primaryVendorCost, setPrimaryVendorCost] = useState("");
+  const [primaryVendorVariationSkus, setPrimaryVendorVariationSkus] = useState<
+    Record<number, string>
+  >({});
 
   useEffect(() => {
     loadData();
@@ -401,6 +444,7 @@ const ProductList = () => {
       setPrimaryVendorId("");
       setPrimaryVendorSku("");
       setPrimaryVendorCost("");
+      setPrimaryVendorVariationSkus({});
       let editorVariations = variationInputs;
 
       // Pull canonical variations from API so edit modal reflects latest persisted rows.
@@ -434,6 +478,7 @@ const ProductList = () => {
       setPrimaryVendorId("");
       setPrimaryVendorSku("");
       setPrimaryVendorCost("");
+      setPrimaryVendorVariationSkus({});
       setVariations(variationInputs);
       syncVariationEditorState(variationInputs);
     }
@@ -462,6 +507,7 @@ const ProductList = () => {
     setPrimaryVendorId("");
     setPrimaryVendorSku("");
     setPrimaryVendorCost("");
+    setPrimaryVendorVariationSkus({});
     setVariationImageModes({ 0: "url" });
     setVariationUploadStatuses({ 0: "idle" });
     setVariationUploadErrors({ 0: "" });
@@ -488,6 +534,7 @@ const ProductList = () => {
     setPrimaryVendorId("");
     setPrimaryVendorSku("");
     setPrimaryVendorCost("");
+    setPrimaryVendorVariationSkus({});
     setVariations(variationInputs);
     syncVariationEditorState(variationInputs);
     setIsModalOpen(true);
@@ -745,6 +792,11 @@ const ProductList = () => {
               vendorId: primaryVendorId,
               cost: primaryVendorCostValue ?? 0,
               sku: primaryVendorSku.trim() || undefined,
+              variationSkus: buildVariationSkuMapForSavedProduct(
+                savedProduct,
+                normalizedVariations,
+                primaryVendorVariationSkus,
+              ),
               isPrimary: true,
             });
             setAllProductVendors(
@@ -801,6 +853,7 @@ const ProductList = () => {
     setManagingProduct(null);
     setProductVendors([]);
     setNewVendor({ vendorId: "", cost: 0, sku: "" });
+    setNewVendorVariationSkus({});
   };
 
   const handleAddVendor = async () => {
@@ -812,6 +865,8 @@ const ProductList = () => {
         vendorId: newVendor.vendorId,
         cost: newVendor.cost,
         sku: newVendor.sku || undefined,
+        variationSkus:
+          sanitizeVariationSkuMap(newVendorVariationSkus) || undefined,
       });
       const updated = [...productVendors, created];
       setProductVendors(updated);
@@ -819,6 +874,7 @@ const ProductList = () => {
         new Map(allProductVendors).set(managingProduct.id, updated),
       );
       setNewVendor({ vendorId: "", cost: 0, sku: "" });
+      setNewVendorVariationSkus({});
     } catch (err) {
       setError("Failed to add vendor");
       console.error("Error adding vendor:", err);
@@ -880,6 +936,39 @@ const ProductList = () => {
     } catch (err) {
       setError("Failed to update SKU");
       console.error("Error updating SKU:", err);
+    }
+  };
+
+  const handleUpdateVariationSku = async (
+    pv: ProductVendor,
+    variationId: string,
+    newSku: string,
+  ) => {
+    if (!managingProduct) return;
+    try {
+      const nextVariationSkus: Record<string, string> = {
+        ...(pv.variationSkus || {}),
+      };
+      if (newSku.trim()) {
+        nextVariationSkus[variationId] = newSku;
+      } else {
+        delete nextVariationSkus[variationId];
+      }
+
+      const updated = await productVendorService.update(pv.id, {
+        variationSkus: sanitizeVariationSkuMap(nextVariationSkus),
+      });
+
+      const updatedList = productVendors.map((item) =>
+        item.id === updated.id ? updated : item,
+      );
+      setProductVendors(updatedList);
+      setAllProductVendors(
+        new Map(allProductVendors).set(managingProduct.id, updatedList),
+      );
+    } catch (err) {
+      setError("Failed to update variation SKU");
+      console.error("Error updating variation SKU:", err);
     }
   };
 
@@ -1384,15 +1473,23 @@ const ProductList = () => {
                               variation.modelNumber ||
                               product.modelNumber ||
                               "-";
-                            const colorFinish = [variation.color, variation.finish]
+                            const colorFinish = [
+                              variation.color,
+                              variation.finish,
+                            ]
                               .filter(Boolean)
                               .join(" / ");
                             return (
                               <div
-                                key={variation.id || `${product.id}-variation-${index}`}
+                                key={
+                                  variation.id ||
+                                  `${product.id}-variation-${index}`
+                                }
                                 className="flex items-start gap-1"
                               >
-                                <span className="text-gray-400">{index + 1}.</span>
+                                <span className="text-gray-400">
+                                  {index + 1}.
+                                </span>
                                 <span>
                                   {effectiveModel}
                                   {colorFinish ? ` - ${colorFinish}` : ""}
@@ -2392,6 +2489,54 @@ const ProductList = () => {
                             </span>
                           </div>
                         </div>
+                        {primaryVendorId && variations.length > 1 && (
+                          <div className="col-span-3 rounded border border-amber-200 bg-white p-2">
+                            <div className="mb-1 text-[11px] font-medium text-gray-700">
+                              Variation SKUs
+                            </div>
+                            <div className="grid grid-cols-1 gap-1">
+                              {variations.map((variation, index) => {
+                                const colorFinish = [
+                                  variation.color,
+                                  variation.finish,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" / ");
+                                const modelLabel = getVariationModelLabel(
+                                  variation,
+                                  formData.modelNumber,
+                                );
+                                return (
+                                  <div
+                                    key={`primary-vendor-var-${index}`}
+                                    className="grid grid-cols-12 gap-2 items-center"
+                                  >
+                                    <div className="col-span-6 text-[11px] text-gray-600 truncate">
+                                      {modelLabel}
+                                      {colorFinish ? ` - ${colorFinish}` : ""}
+                                    </div>
+                                    <input
+                                      type="text"
+                                      value={
+                                        primaryVendorVariationSkus[index] || ""
+                                      }
+                                      onChange={(e) =>
+                                        setPrimaryVendorVariationSkus(
+                                          (prev) => ({
+                                            ...prev,
+                                            [index]: e.target.value,
+                                          }),
+                                        )
+                                      }
+                                      className="col-span-6 px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                                      placeholder="SKU"
+                                    />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </>
@@ -2567,6 +2712,59 @@ const ProductList = () => {
                       / {managingProduct?.unit || "ea"}
                     </span>
                   </div>
+                  {managingProduct.variations &&
+                    managingProduct.variations.length > 1 && (
+                      <div className="col-span-12 rounded border border-gray-200 bg-white p-2">
+                        <div className="mb-1 text-[11px] font-medium text-gray-700">
+                          Variation SKUs (optional)
+                        </div>
+                        <div className="grid grid-cols-1 gap-1">
+                          {managingProduct.variations
+                            .slice()
+                            .sort(
+                              (a, b) => (a.sortOrder || 0) - (b.sortOrder || 0),
+                            )
+                            .map((variation) => {
+                              const colorFinish = [
+                                variation.color,
+                                variation.finish,
+                              ]
+                                .filter(Boolean)
+                                .join(" / ");
+                              const modelLabel =
+                                variation.effectiveModelNumber ||
+                                variation.modelNumber ||
+                                managingProduct.modelNumber ||
+                                "-";
+                              return (
+                                <div
+                                  key={`new-vendor-var-sku-${variation.id}`}
+                                  className="grid grid-cols-12 gap-2 items-center"
+                                >
+                                  <div className="col-span-5 text-[11px] text-gray-600 truncate">
+                                    {modelLabel}
+                                    {colorFinish ? ` - ${colorFinish}` : ""}
+                                  </div>
+                                  <input
+                                    type="text"
+                                    value={
+                                      newVendorVariationSkus[variation.id] || ""
+                                    }
+                                    onChange={(e) =>
+                                      setNewVendorVariationSkus((prev) => ({
+                                        ...prev,
+                                        [variation.id]: e.target.value,
+                                      }))
+                                    }
+                                    className="col-span-7 px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                                    placeholder="SKU"
+                                  />
+                                </div>
+                              );
+                            })}
+                        </div>
+                      </div>
+                    )}
                   <button
                     onClick={handleAddVendor}
                     disabled={!newVendor.vendorId}
@@ -2593,7 +2791,7 @@ const ProductList = () => {
                       return (
                         <div
                           key={pv.id}
-                          className={`flex items-center gap-2 p-2 rounded-lg border ${
+                          className={`flex flex-wrap items-center gap-2 p-2 rounded-lg border ${
                             pv.isPrimary
                               ? "border-indigo-500 bg-indigo-50"
                               : "border-gray-200 bg-white"
@@ -2677,6 +2875,82 @@ const ProductList = () => {
                           >
                             Remove
                           </button>
+                          {managingProduct.variations &&
+                            managingProduct.variations.length > 1 && (
+                              <div className="w-full mt-2 rounded border border-gray-200 bg-gray-50 p-2">
+                                <div className="mb-1 text-[11px] font-medium text-gray-700">
+                                  Variation SKUs
+                                </div>
+                                <div className="grid grid-cols-1 gap-1">
+                                  {managingProduct.variations
+                                    .slice()
+                                    .sort(
+                                      (a, b) =>
+                                        (a.sortOrder || 0) - (b.sortOrder || 0),
+                                    )
+                                    .map((variation) => {
+                                      const colorFinish = [
+                                        variation.color,
+                                        variation.finish,
+                                      ]
+                                        .filter(Boolean)
+                                        .join(" / ");
+                                      const modelLabel =
+                                        variation.effectiveModelNumber ||
+                                        variation.modelNumber ||
+                                        managingProduct.modelNumber ||
+                                        "-";
+                                      return (
+                                        <div
+                                          key={`existing-vendor-var-sku-${pv.id}-${variation.id}`}
+                                          className="grid grid-cols-12 gap-2 items-center"
+                                        >
+                                          <div className="col-span-6 text-[11px] text-gray-600 truncate">
+                                            {modelLabel}
+                                            {colorFinish
+                                              ? ` - ${colorFinish}`
+                                              : ""}
+                                          </div>
+                                          <input
+                                            type="text"
+                                            placeholder="SKU"
+                                            value={
+                                              pv.variationSkus?.[
+                                                variation.id
+                                              ] || ""
+                                            }
+                                            onChange={(e) => {
+                                              const updatedList =
+                                                productVendors.map((item) =>
+                                                  item.id === pv.id
+                                                    ? {
+                                                        ...item,
+                                                        variationSkus: {
+                                                          ...(item.variationSkus ||
+                                                            {}),
+                                                          [variation.id]:
+                                                            e.target.value,
+                                                        },
+                                                      }
+                                                    : item,
+                                                );
+                                              setProductVendors(updatedList);
+                                            }}
+                                            onBlur={(e) =>
+                                              handleUpdateVariationSku(
+                                                pv,
+                                                variation.id,
+                                                e.target.value,
+                                              )
+                                            }
+                                            className="col-span-6 px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500"
+                                          />
+                                        </div>
+                                      );
+                                    })}
+                                </div>
+                              </div>
+                            )}
                         </div>
                       );
                     })}

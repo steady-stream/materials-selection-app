@@ -1,4 +1,8 @@
-import type { OpportunityDetails, SalesforceOpportunity } from "../types";
+import type {
+  OpportunityDetails,
+  SalesforceOpportunity,
+  SalesforceOpportunityFilters,
+} from "../types";
 
 // TODO: Update this to point to the new Salesforce Lambda API (separate from MaterialSelection-API)
 // This will be a dedicated Lambda function for Salesforce integration
@@ -8,17 +12,32 @@ const SF_API_BASE_URL =
 
 export const salesforceService = {
   /**
-   * Fetch all Salesforce Opportunities where Selection_Coordinator_Needed__c = true
+   * Fetch Salesforce Opportunities using server-side filters.
    */
-  getOpportunities: async (): Promise<SalesforceOpportunity[]> => {
+  getOpportunities: async (
+    filters: SalesforceOpportunityFilters = {},
+  ): Promise<SalesforceOpportunity[]> => {
     try {
+      const queryParams = new URLSearchParams();
+      if (filters.selectionCoordinatorNeeded !== undefined) {
+        queryParams.set(
+          "selectionCoordinatorNeeded",
+          String(filters.selectionCoordinatorNeeded),
+        );
+      }
+      if (filters.stage?.trim()) {
+        queryParams.set("stage", filters.stage.trim());
+      }
+
+      const opportunitiesUrl = `${SF_API_BASE_URL}/salesforce/opportunities${
+        queryParams.toString() ? `?${queryParams.toString()}` : ""
+      }`;
+
       console.log(
         "Fetching from:",
-        `${SF_API_BASE_URL}/salesforce/opportunities`,
+        opportunitiesUrl,
       );
-      const response = await fetch(
-        `${SF_API_BASE_URL}/salesforce/opportunities`,
-      );
+      const response = await fetch(opportunitiesUrl);
 
       console.log("Response status:", response.status);
       if (!response.ok) {

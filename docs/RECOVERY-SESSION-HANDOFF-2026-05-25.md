@@ -7,6 +7,7 @@ Purpose: Preserve full working context so work can resume after reconnecting net
 ## 1. What Was Requested and Completed
 
 ### Main asks handled in this session
+
 1. Continue variation implementation and deploy to test.
 2. Fix product add/edit failure in test.
 3. Preserve session context for recovery.
@@ -14,6 +15,7 @@ Purpose: Preserve full working context so work can resume after reconnecting net
 5. Deploy updated frontend/backend to test.
 
 ### What is completed
+
 1. Variation architecture and plumbing are in place across frontend types/services and backend handlers.
 2. Test infra blocker was fixed previously by creating Product Variations table and ProductIdIndex in test.
 3. Product maintenance UX changes are implemented for modal-local errors, inline variation validation, and variation expansion display.
@@ -22,14 +24,17 @@ Purpose: Preserve full working context so work can resume after reconnecting net
 6. Frontend test deployment succeeded and CloudFront invalidation was completed.
 
 ### What is not yet completed
+
 1. Backend Lambda deploy in this final pass did not complete due network drive disconnect during packaging.
 
 ## 2. Technical Changes Made This Session
 
 ## A) Product maintenance UI updates
+
 File: src/components/ProductList.tsx
 
 Implemented:
+
 1. Added detailed variation validation helper returning per-row errors.
 2. Added modal-scoped error state so validation/save errors show inside modal.
 3. Added per-variation inline validation messages.
@@ -39,40 +44,50 @@ Implemented:
 7. Expanded rows now show variation effective model and color/finish details.
 
 Behavior intent:
+
 1. Errors related to add/edit product appear where user is working.
 2. Base model remains visible and authoritative.
 3. Variations are visible without forcing modal open.
 
 ## B) Backend model-number semantic fix
+
 Files:
+
 1. lambda/catalog/index.js
 2. lambda/index.js
 
 Implemented:
+
 1. In hydrateProduct, product.modelNumber now remains product.modelNumber.
 2. No longer overwrite product model with default variation effective model.
 3. Variation effective model remains on each variation row.
 
 Reason:
+
 1. Fix base model confusion when multiple variations exist.
 
 ## C) Project selection carry-through
+
 File: src/components/ProjectDetail.tsx
 
 Implemented:
+
 1. Added expandedInsertProducts state for Insert Product modal list.
 2. Added variation count badge and expand/collapse control in model column.
 3. Expanded state displays variation effective model plus color/finish details.
 
 Reason:
+
 1. Keep product selection screens consistent with Product maintenance visibility.
 
 ## 3. Build and Validation Results
 
 Command run:
+
 1. npm run build
 
 Result:
+
 1. Build passed after changes.
 2. Existing warnings remain about large chunks and mixed dynamic/static import for services index module.
 3. No new compile failures introduced by these changes.
@@ -80,10 +95,13 @@ Result:
 ## 4. Deployment Activity in This Session
 
 ## A) Frontend test deploy (success)
+
 Command run:
+
 1. ./deploy-test.ps1
 
 Observed outcome:
+
 1. Verified AWS account: 634752426026 (test)
 2. Build:test succeeded.
 3. Dist synced to S3 bucket: materials-selection-app-7525
@@ -92,10 +110,13 @@ Observed outcome:
 6. Test URL: https://mpmaterials.apiaconsulting.com
 
 ## B) Backend Lambda test deploy (failed due network path)
+
 Command run:
+
 1. ./deploy-lambda-test.ps1
 
 Failure characteristics:
+
 1. Script started and identified account 634752426026.
 2. Failed during packaging/dispose with unexpected network error on zip path.
 3. Pop-Location then failed because project path was no longer reachable.
@@ -105,18 +126,21 @@ Failure characteristics:
 During lambda deployment, mapped drive access dropped.
 
 Evidence collected:
+
 1. Current location unexpectedly became unresolved project/lambda path.
 2. Test-Path on expected project path returned False.
 3. net use reported G: mapped to \\LS220D986\Apia as Disconnected.
 4. Deleting and remapping G: returned network name cannot be found.
 
 Impact:
+
 1. Frontend deploy completed before disconnect.
 2. Backend deploy is pending until network share is restored.
 
 ## 6. Immediate Recovery Plan After Restart/Reconnect
 
 Perform these in order:
+
 1. Restore network/share connectivity (VPN/NAS/host availability).
 2. Reconnect mapped drive G: to \\LS220D986\Apia.
 3. Confirm project path exists:
@@ -130,6 +154,7 @@ Perform these in order:
 ## 7. Post-Reconnect Verification Checklist
 
 After lambda deploy succeeds:
+
 1. Open test app and hard refresh.
 2. In Product maintenance:
    - Confirm modal errors show in modal (not behind modal).

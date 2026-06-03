@@ -103,14 +103,35 @@ async function querySalesforce(query) {
   }
 }
 
+function escapeSoqlString(value) {
+  return String(value || "")
+    .replace(/\\/g, "\\\\")
+    .replace(/'/g, "\\'");
+}
+
 /**
- * Get all Opportunities where Selection_Coordinator_Needed__c = true
+ * Get Opportunities using optional server-side filters.
  */
-async function getOpportunities() {
+async function getOpportunities(filters = {}) {
+  const whereClauses = [];
+
+  if (filters.selectionCoordinatorNeeded === true) {
+    whereClauses.push("Selection_Coordinator_Needed__c = true");
+  }
+
+  if (filters.stage) {
+    whereClauses.push(
+      `StageName LIKE '%${escapeSoqlString(filters.stage)}%'`,
+    );
+  }
+
+  const whereSql =
+    whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+
   const query = `
     SELECT Id, Name, StageName, AccountId, OCR_LU_PrimaryContact__c, Selection_Coordinator_Needed__c
     FROM Opportunity
-    WHERE Selection_Coordinator_Needed__c = true
+    ${whereSql}
     ORDER BY Name ASC
   `;
 
@@ -189,11 +210,19 @@ exports.handler = async (event) => {
   }
 
   try {
-    const { httpMethod, path, pathParameters } = event;
+    const { httpMethod, path, pathParameters, queryStringParameters } = event;
 
     // GET /salesforce/opportunities - List all opportunities
     if (httpMethod === "GET" && path === "/salesforce/opportunities") {
-      const opportunities = await getOpportunities();
+      const selectionCoordinatorNeededParam =
+        queryStringParameters?.selectionCoordinatorNeeded;
+      const opportunities = await getOpportunities({
+        selectionCoordinatorNeeded:
+          selectionCoordinatorNeededParam === undefined
+            ? true
+            : selectionCoordinatorNeededParam === "true",
+        stage: queryStringParameters?.stage?.trim() || undefined,
+      });
 
       return {
         statusCode: 200,

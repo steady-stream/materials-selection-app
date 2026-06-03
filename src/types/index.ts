@@ -146,6 +146,7 @@ export interface LineItemOption {
   lineItemId: string;
   productId: string;
   productVariationId?: string;
+  modelNumber?: string;
   unitCost: number;
   isSelected: boolean;
   createdAt: string;
@@ -155,6 +156,7 @@ export interface LineItemOption {
 export interface CreateLineItemOptionRequest {
   productId: string;
   productVariationId?: string;
+  modelNumber?: string;
   unitCost: number;
   isSelected?: boolean;
 }
@@ -167,6 +169,7 @@ export interface UpdateLineItemOptionRequest {
 export interface SelectLineItemOptionRequest {
   productId: string;
   productVariationId?: string;
+  modelNumber?: string;
   unitCost: number;
 }
 
@@ -392,6 +395,7 @@ export interface ProductVendor {
   vendorId: string;
   cost: number;
   sku?: string;
+  variationSkus?: Record<string, string>;
   isPrimary: boolean;
   createdAt: string;
   updatedAt: string;
@@ -402,12 +406,14 @@ export interface CreateProductVendorRequest {
   vendorId: string;
   cost: number;
   sku?: string;
+  variationSkus?: Record<string, string>;
   isPrimary?: boolean;
 }
 
 export interface UpdateProductVendorRequest {
   cost?: number;
   sku?: string;
+  variationSkus?: Record<string, string>;
   isPrimary?: boolean;
 }
 
@@ -419,6 +425,11 @@ export interface SalesforceOpportunity {
   AccountId: string;
   OCR_LU_PrimaryContact__c: string;
   Selection_Coordinator_Needed__c: boolean;
+}
+
+export interface SalesforceOpportunityFilters {
+  selectionCoordinatorNeeded?: boolean;
+  stage?: string;
 }
 
 export interface SalesforceAccount {

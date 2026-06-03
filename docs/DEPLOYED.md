@@ -1,5 +1,10 @@
 # Deployed App Information
 
+> STALE DOCUMENT NOTICE (2026-06-03)
+>
+> This file is retained for historical context and is no longer the source of truth.
+> Use docs/CURRENT-STATUS-2026-06-03.md for current deployment and environment status.
+
 ## Live URL
 
 http://materials-selection-app-7525.s3-website-us-east-1.amazonaws.com

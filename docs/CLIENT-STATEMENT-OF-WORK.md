@@ -1,5 +1,11 @@
 # MegaPros Materials Selection App
 
+> DOCUMENT CONTEXT NOTICE (2026-06-03)
+>
+> This Statement of Work is a contractual delivery snapshot as of 2026-03-10.
+> It is not the live operational status source.
+> For current environment/deployment status, use docs/CURRENT-STATUS-2026-06-03.md.
+
 ## Statement of Work — Delivered Features
 
 **Prepared for:** MegaPros  
@@ -109,6 +115,7 @@ Two modes of AI support are embedded directly in every project:
 ### 2.1 Salesforce Integration
 
 - **Create projects directly from Salesforce Opportunities** — a "Use Salesforce" toggle on the New Project form pulls a live list of open opportunities from Salesforce CRM.
+- The **Select Salesforce Opportunity** workflow includes operator-controlled filtering for the Selection Coordinator flag, stage-based filtering, and opportunity-name search to narrow the list before selection.
 - Selecting an opportunity auto-populates the project name, customer name, and links the project to the Salesforce opportunity ID.
 - Enables bi-directional traceability between the materials selection workflow and the CRM sales record.
 

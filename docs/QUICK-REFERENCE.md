@@ -1,5 +1,10 @@
 # Quick Reference Card - Materials Selection App
 
+> STALE DOCUMENT NOTICE (2026-06-03)
+>
+> This file is retained for historical context and is no longer the source of truth.
+> Use docs/CURRENT-STATUS-2026-06-03.md for current deployment and environment status.
+
 ## Access URLs
 
 ### Frontend (Choose one based on deployment stage)

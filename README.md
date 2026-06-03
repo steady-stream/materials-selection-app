@@ -1,5 +1,10 @@
 # Materials Selection App
 
+> STALE DOCUMENT NOTICE (2026-06-03)
+>
+> This README contains historical deployment and architecture details that are no longer authoritative.
+> Use docs/CURRENT-STATUS-2026-06-03.md for current environment and deployment status.
+
 A full-stack React + AWS serverless application for construction materials selection, tracking, and ordering. Built to replicate and enhance traditional Excel spreadsheet workflows with a modern web interface.
 
 ## 🚀 Quick Access

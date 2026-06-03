@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
     categoryService,
@@ -23,6 +23,7 @@ import type {
     Order,
     OrderItem,
     Product,
+    ProductVariation,
     ProductVendor,
     Project,
     ProjectShareCreated,
@@ -166,6 +167,15 @@ const ProjectDetail = () => {
   const [insertQuantity, setInsertQuantity] = useState<number>(1);
   const [insertUnitCost, setInsertUnitCost] = useState<number>(0);
   const [insertVendorId, setInsertVendorId] = useState<string>("");
+  const [insertVariationByProduct, setInsertVariationByProduct] = useState<
+    Record<string, string>
+  >({});
+  const [inlineVariationModal, setInlineVariationModal] = useState<{
+    product: Product;
+    variations: ProductVariation[];
+    selectedVariationId: string;
+    preferredVendorId?: string;
+  } | null>(null);
   const [openActionMenu, setOpenActionMenu] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{
     top?: number;
@@ -222,6 +232,9 @@ const ProjectDetail = () => {
     lineItemId?: string;
   } | null>(null);
   const [isResequencing, setIsResequencing] = useState(false);
+  const inlineVariationResolverRef = useRef<
+    ((variation: ProductVariation | null | undefined) => void) | null
+  >(null);
 
   // SharePoint link-folder modal state
   const [showSpLinkModal, setShowSpLinkModal] = useState(false);
@@ -338,6 +351,51 @@ const ProjectDetail = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const getVariationModelNumber = (
+    product: Product,
+    variation: ProductVariation | null,
+  ) => {
+    return (
+      variation?.effectiveModelNumber ||
+      variation?.modelNumber ||
+      product.modelNumber ||
+      undefined
+    );
+  };
+
+  const resolveInlineVariationModal = (
+    variation: ProductVariation | null | undefined,
+  ) => {
+    inlineVariationResolverRef.current?.(variation);
+    inlineVariationResolverRef.current = null;
+    setInlineVariationModal(null);
+  };
+
+  const chooseVariationForInlineSelection = async (
+    product: Product,
+    preferredVariationId?: string | null,
+    preferredVendorId?: string,
+  ): Promise<ProductVariation | null | undefined> => {
+    const variations = product.variations || [];
+    if (variations.length === 0) return null;
+    if (variations.length === 1) return variations[0];
+
+    const preferredVariation =
+      variations.find((variation) => variation.id === preferredVariationId) ||
+      variations.find((variation) => variation.isDefault) ||
+      variations[0];
+
+    return await new Promise<ProductVariation | null | undefined>((resolve) => {
+      inlineVariationResolverRef.current = resolve;
+      setInlineVariationModal({
+        product,
+        variations,
+        selectedVariationId: preferredVariation.id,
+        preferredVendorId,
+      });
+    });
   };
 
   // Share link handlers
@@ -501,6 +559,7 @@ const ProjectDetail = () => {
         vendorId: undefined,
         manufacturerId: undefined,
         productId: undefined,
+        productVariationId: undefined,
         modelNumber: undefined,
       });
       // Reset products list to full list
@@ -540,6 +599,8 @@ const ProjectDetail = () => {
       if (editingItem.productId) {
         await lineItemOptionService.selectOption(editingItem.id, {
           productId: editingItem.productId,
+          productVariationId: editingItem.productVariationId,
+          modelNumber: editingItem.modelNumber || undefined,
           unitCost: editingItem.unitCost,
         });
       }
@@ -569,6 +630,8 @@ const ProjectDetail = () => {
       if (editingItem.productId) {
         await lineItemOptionService.selectOption(editingItem.id, {
           productId: editingItem.productId,
+          productVariationId: editingItem.productVariationId,
+          modelNumber: editingItem.modelNumber || undefined,
           unitCost: editingItem.unitCost,
         });
       }
@@ -660,6 +723,7 @@ const ProjectDetail = () => {
         ...editingItem,
         manufacturerId: manufacturerId || undefined,
         productId: undefined,
+        productVariationId: undefined,
         vendorId: undefined,
         modelNumber: undefined,
         material: "",
@@ -683,6 +747,19 @@ const ProjectDetail = () => {
     if (!editingItem) return;
     const product = products.find((p) => p.id === productId);
     if (product) {
+      const selectedVariation = await chooseVariationForInlineSelection(
+        product,
+        editingItem.productVariationId,
+        editingItem.vendorId,
+      );
+      if ((product.variations || []).length > 1 && !selectedVariation) {
+        return;
+      }
+      const selectedModelNumber = getVariationModelNumber(
+        product,
+        selectedVariation || null,
+      );
+
       const productVendorList = productVendors.filter(
         (pv: ProductVendor) => pv.productId === productId,
       );
@@ -709,8 +786,9 @@ const ProjectDetail = () => {
       setEditingItem({
         ...editingItem,
         productId: product.id,
+        productVariationId: selectedVariation?.id,
         manufacturerId: product.manufacturerId,
-        modelNumber: product.modelNumber || undefined,
+        modelNumber: selectedModelNumber,
         material: product.description || "",
         unit: product.unit || "",
         vendorId: selectedVendorId,
@@ -944,6 +1022,7 @@ const ProjectDetail = () => {
         ...newItem,
         manufacturerId: manufacturerId || undefined,
         productId: undefined,
+        productVariationId: undefined,
         vendorId: undefined,
         modelNumber: undefined,
         material: "",
@@ -987,6 +1066,19 @@ const ProjectDetail = () => {
   const handleProductSelect = async (productId: string) => {
     const product = products.find((p) => p.id === productId);
     if (product) {
+      const selectedVariation = await chooseVariationForInlineSelection(
+        product,
+        newItem.productVariationId,
+        newItem.vendorId,
+      );
+      if ((product.variations || []).length > 1 && !selectedVariation) {
+        return;
+      }
+      const selectedModelNumber = getVariationModelNumber(
+        product,
+        selectedVariation || null,
+      );
+
       // Get all vendors for this product
       const productVendorList = productVendors.filter(
         (pv: ProductVendor) => pv.productId === productId,
@@ -1018,8 +1110,9 @@ const ProjectDetail = () => {
       setNewItem({
         ...newItem,
         productId: product.id,
+        productVariationId: selectedVariation?.id,
         manufacturerId: product.manufacturerId,
-        modelNumber: product.modelNumber || undefined,
+        modelNumber: selectedModelNumber,
         name: newItem.name.trim() ? newItem.name : product.name,
         material: product.description || "",
         unit: product.unit || "",
@@ -1037,13 +1130,54 @@ const ProjectDetail = () => {
     setSelectedCategoryForInsert(item.categoryId);
     setInsertQuantity(item.quantity);
     setInsertUnitCost(0);
+    setInsertVariationByProduct({});
     setShowInsertProductModal(true);
+  };
+
+  const resolveInsertVariation = (
+    product: Product,
+  ): ProductVariation | null => {
+    const variations = product.variations || [];
+
+    if (variations.length === 0) {
+      return null;
+    }
+
+    if (variations.length === 1) {
+      return variations[0];
+    }
+
+    const selectedVariationId = insertVariationByProduct[product.id];
+    if (!selectedVariationId) {
+      alert("Please select a variation before inserting this product.");
+      return null;
+    }
+
+    const selectedVariation = variations.find(
+      (variation) => variation.id === selectedVariationId,
+    );
+    if (!selectedVariation) {
+      alert("Selected variation is no longer valid. Please choose again.");
+      return null;
+    }
+
+    return selectedVariation;
   };
 
   const handleSelectProduct = async (product: Product) => {
     if (!selectingForLineItem) return;
 
     try {
+      const selectedVariation = resolveInsertVariation(product);
+      if (product.variations?.length && !selectedVariation) {
+        return;
+      }
+      const selectedModelNumber =
+        selectedVariation?.effectiveModelNumber ||
+        selectedVariation?.modelNumber ||
+        product.modelNumber ||
+        undefined;
+
       // Get primary vendor for this product
       const primaryVendor = await productVendorService.getPrimaryVendor(
         product.id,
@@ -1059,8 +1193,9 @@ const ProjectDetail = () => {
       const updatedItem = {
         ...selectingForLineItem,
         productId: product.id,
+        productVariationId: selectedVariation?.id,
         manufacturerId: product.manufacturerId,
-        modelNumber: product.modelNumber || undefined,
+        modelNumber: selectedModelNumber,
         material: product.description || "",
         unit: product.unit || "",
         vendorId: primaryVendor?.vendorId,
@@ -1077,6 +1212,8 @@ const ProjectDetail = () => {
       // Sync to LineItemOptions
       await lineItemOptionService.selectOption(selectingForLineItem.id, {
         productId: product.id,
+        productVariationId: selectedVariation?.id,
+        modelNumber: selectedModelNumber,
         unitCost: finalUnitCost,
       });
 
@@ -1096,6 +1233,7 @@ const ProjectDetail = () => {
       setInsertQuantity(1);
       setInsertUnitCost(0);
       setInsertVendorId("");
+      setInsertVariationByProduct({});
     } catch (err) {
       alert("Failed to select product");
       console.error("Error selecting product:", err);
@@ -1113,6 +1251,16 @@ const ProjectDetail = () => {
     }
 
     try {
+      const selectedVariation = resolveInsertVariation(product);
+      if (product.variations?.length && !selectedVariation) {
+        return;
+      }
+      const selectedModelNumber =
+        selectedVariation?.effectiveModelNumber ||
+        selectedVariation?.modelNumber ||
+        product.modelNumber ||
+        undefined;
+
       // If vendor override is set, use locally-loaded productVendors for cost lookup
       // to avoid an extra API call. Fall back to getPrimaryVendor otherwise.
       let vendorId: string | undefined;
@@ -1139,11 +1287,12 @@ const ProjectDetail = () => {
         quantity: insertQuantity,
         unit: product.unit || "ea",
         unitCost: insertUnitCost > 0 ? insertUnitCost : vendorCost,
-        notes: product.modelNumber ? `Model: ${product.modelNumber}` : "",
+        notes: selectedModelNumber ? `Model: ${selectedModelNumber}` : "",
         productId: product.id,
+        productVariationId: selectedVariation?.id,
         manufacturerId: product.manufacturerId,
         vendorId,
-        modelNumber: product.modelNumber,
+        modelNumber: selectedModelNumber,
         status: "pending",
       };
 
@@ -1152,6 +1301,8 @@ const ProjectDetail = () => {
       // Sync to LineItemOptions
       await lineItemOptionService.selectOption(created.id, {
         productId: product.id,
+        productVariationId: selectedVariation?.id,
+        modelNumber: selectedModelNumber,
         unitCost: insertUnitCost > 0 ? insertUnitCost : vendorCost,
       });
 
@@ -1169,6 +1320,7 @@ const ProjectDetail = () => {
       setInsertQuantity(1);
       setInsertUnitCost(0);
       setInsertVendorId("");
+      setInsertVariationByProduct({});
     } catch (err) {
       alert("Failed to insert product");
       console.error("Error inserting product:", err);
@@ -2785,6 +2937,14 @@ const ProjectDetail = () => {
                                         (p) => p.id === item.productId,
                                       );
                                       if (!prod) return null;
+                                      const selectedVariation =
+                                        item.productVariationId
+                                          ? (prod.variations || []).find(
+                                              (variation) =>
+                                                variation.id ===
+                                                item.productVariationId,
+                                            )
+                                          : null;
                                       const mfr = manufacturers.find(
                                         (m) => m.id === prod.manufacturerId,
                                       );
@@ -2811,13 +2971,15 @@ const ProjectDetail = () => {
                                               </div>
                                             )}
                                             <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-gray-700">
-                                              {prod.modelNumber && (
+                                              {(item.modelNumber ||
+                                                prod.modelNumber) && (
                                                 <>
                                                   <span className="text-gray-500">
                                                     Model:
                                                   </span>
                                                   <span>
-                                                    {prod.modelNumber}
+                                                    {item.modelNumber ||
+                                                      prod.modelNumber}
                                                   </span>
                                                 </>
                                               )}
@@ -2837,20 +2999,28 @@ const ProjectDetail = () => {
                                                   <span>{prod.category}</span>
                                                 </>
                                               )}
-                                              {prod.color && (
+                                              {(selectedVariation?.color ||
+                                                prod.color) && (
                                                 <>
                                                   <span className="text-gray-500">
                                                     Color:
                                                   </span>
-                                                  <span>{prod.color}</span>
+                                                  <span>
+                                                    {selectedVariation?.color ||
+                                                      prod.color}
+                                                  </span>
                                                 </>
                                               )}
-                                              {prod.finish && (
+                                              {(selectedVariation?.finish ||
+                                                prod.finish) && (
                                                 <>
                                                   <span className="text-gray-500">
                                                     Finish:
                                                   </span>
-                                                  <span>{prod.finish}</span>
+                                                  <span>
+                                                    {selectedVariation?.finish ||
+                                                      prod.finish}
+                                                  </span>
                                                 </>
                                               )}
                                               {prod.unit && (
@@ -3410,6 +3580,7 @@ const ProjectDetail = () => {
                                     vendorId: undefined,
                                     manufacturerId: undefined,
                                     productId: undefined,
+                                    productVariationId: undefined,
                                     modelNumber: undefined,
                                   });
                                   // Reset products list to full list
@@ -5112,6 +5283,7 @@ const ProjectDetail = () => {
                   setFilterColor("");
                   setFilterFinish("");
                   setInsertVendorId("");
+                  setInsertVariationByProduct({});
                   setShowQuickAddProduct(false);
                   setQuickAddProduct({
                     name: "",
@@ -5705,6 +5877,9 @@ const ProjectDetail = () => {
                         Cost
                       </th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">
+                        Variation
+                      </th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">
                         Action
                       </th>
                     </tr>
@@ -5824,8 +5999,22 @@ const ProjectDetail = () => {
                           const manufacturer = manufacturers.find(
                             (m) => m.id === product.manufacturerId,
                           );
-                          const variationCount = product.variations?.length || 0;
+                          const variationCount =
+                            product.variations?.length || 0;
                           const hasMultipleVariations = variationCount > 1;
+                          const singleVariation =
+                            variationCount === 1
+                              ? product.variations?.[0]
+                              : undefined;
+                          const selectedVariationId =
+                            insertVariationByProduct[product.id] ||
+                            singleVariation?.id ||
+                            "";
+                          const selectedVariation =
+                            product.variations?.find(
+                              (variation) =>
+                                variation.id === selectedVariationId,
+                            ) || singleVariation;
                           const isExpanded = expandedInsertProducts.has(
                             product.id,
                           );
@@ -6117,6 +6306,60 @@ const ProjectDetail = () => {
                                   ? `$${primaryPV.cost.toFixed(2)}`
                                   : "-"}
                               </td>
+                              <td className="px-3 py-2 text-xs text-gray-600">
+                                {hasMultipleVariations ? (
+                                  <select
+                                    value={selectedVariationId}
+                                    onChange={(e) =>
+                                      setInsertVariationByProduct((prev) => ({
+                                        ...prev,
+                                        [product.id]: e.target.value,
+                                      }))
+                                    }
+                                    className={`w-full min-w-[180px] px-2 py-1 text-xs border rounded-md focus:ring-2 ${
+                                      selectedVariationId
+                                        ? "border-gray-300 focus:ring-indigo-500"
+                                        : "border-amber-400 bg-amber-50 focus:ring-amber-500"
+                                    }`}
+                                  >
+                                    <option value="">
+                                      Select variation (required)...
+                                    </option>
+                                    {product.variations?.map((variation) => {
+                                      const effectiveModel =
+                                        variation.effectiveModelNumber ||
+                                        variation.modelNumber ||
+                                        product.modelNumber ||
+                                        "-";
+                                      const colorFinish = [
+                                        variation.color,
+                                        variation.finish,
+                                      ]
+                                        .filter(Boolean)
+                                        .join(" / ");
+                                      return (
+                                        <option
+                                          key={variation.id}
+                                          value={variation.id}
+                                        >
+                                          {colorFinish
+                                            ? `${effectiveModel} - ${colorFinish}`
+                                            : effectiveModel}
+                                        </option>
+                                      );
+                                    })}
+                                  </select>
+                                ) : selectedVariation ? (
+                                  <span>
+                                    {selectedVariation.effectiveModelNumber ||
+                                      selectedVariation.modelNumber ||
+                                      product.modelNumber ||
+                                      "-"}
+                                  </span>
+                                ) : (
+                                  <span>-</span>
+                                )}
+                              </td>
                               <td className="px-3 py-2 text-xs">
                                 <button
                                   onClick={() =>
@@ -6124,7 +6367,11 @@ const ProjectDetail = () => {
                                       ? handleSelectProduct(product)
                                       : handleInsertProduct(product)
                                   }
-                                  className="bg-green-600 text-white px-3 py-1 rounded text-xs hover:bg-green-700"
+                                  disabled={
+                                    hasMultipleVariations &&
+                                    !selectedVariationId
+                                  }
+                                  className="bg-green-600 text-white px-3 py-1 rounded text-xs hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
                                 >
                                   {selectingForLineItem ? "Select" : "Insert"}
                                 </button>
@@ -6135,7 +6382,7 @@ const ProjectDetail = () => {
                       ) : (
                         <tr>
                           <td
-                            colSpan={7}
+                            colSpan={8}
                             className="px-3 py-8 text-center text-xs text-gray-500"
                           >
                             No products found matching your filters
@@ -6163,6 +6410,7 @@ const ProjectDetail = () => {
                   setFilterColor("");
                   setFilterFinish("");
                   setInsertVendorId("");
+                  setInsertVariationByProduct({});
                   setShowQuickAddProduct(false);
                   setQuickAddProduct({
                     name: "",
@@ -6970,6 +7218,210 @@ const ProjectDetail = () => {
                   sharepointDriveId={project.sharepointDriveId}
                 />
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {inlineVariationModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+          <div className="w-full max-w-2xl rounded-lg bg-white shadow-xl border border-gray-200">
+            <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900">
+                  Select Product Variation
+                </h2>
+                <p className="mt-1 text-xs text-gray-500">
+                  {inlineVariationModal.product.name}
+                </p>
+              </div>
+              <button
+                onClick={() => resolveInlineVariationModal(undefined)}
+                className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+            <div className="border-b border-gray-100 bg-gray-50 px-5 py-3">
+              {(() => {
+                const manufacturerName =
+                  manufacturers.find(
+                    (manufacturer) =>
+                      manufacturer.id ===
+                      inlineVariationModal.product.manufacturerId,
+                  )?.name || "-";
+                const productVendorList = productVendors.filter(
+                  (pv) => pv.productId === inlineVariationModal.product.id,
+                );
+                const preferredVendor =
+                  productVendorList.find(
+                    (pv) =>
+                      pv.vendorId === inlineVariationModal.preferredVendorId,
+                  ) ||
+                  productVendorList.find((pv) => pv.isPrimary) ||
+                  productVendorList[0];
+                const vendorSummary = preferredVendor
+                  ? vendors.find(
+                      (vendor) => vendor.id === preferredVendor.vendorId,
+                    )?.name || "-"
+                  : "-";
+                const vendorCost = preferredVendor
+                  ? `$${applyVendorTaxRate(preferredVendor.cost, preferredVendor.vendorId).toFixed(2)}/${inlineVariationModal.product.unit || "ea"}`
+                  : "-";
+
+                return (
+                  <div className="grid grid-cols-4 gap-3 text-[11px] text-gray-600">
+                    <div>
+                      <div className="font-medium text-gray-500">Vendor</div>
+                      <div className="mt-0.5 truncate" title={vendorSummary}>
+                        {vendorSummary}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="font-medium text-gray-500">Cost</div>
+                      <div className="mt-0.5 truncate" title={vendorCost}>
+                        {vendorCost}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="font-medium text-gray-500">
+                        Manufacturer
+                      </div>
+                      <div className="mt-0.5 truncate" title={manufacturerName}>
+                        {manufacturerName}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="font-medium text-gray-500">Material</div>
+                      <div
+                        className="mt-0.5 truncate"
+                        title={inlineVariationModal.product.description || "-"}
+                      >
+                        {inlineVariationModal.product.description || "-"}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+            <div className="max-h-[60vh] overflow-y-auto p-3 space-y-1.5">
+              <div className="grid grid-cols-[24px_minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,0.9fr)_92px] items-center gap-2 px-2 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                <div></div>
+                <div>Model</div>
+                <div>Variation</div>
+                <div>Vendor SKU</div>
+                <div className="text-right">Cost</div>
+              </div>
+              {inlineVariationModal.variations.map((variation) => {
+                const productVendorList = productVendors.filter(
+                  (pv) => pv.productId === inlineVariationModal.product.id,
+                );
+                const preferredVendor =
+                  productVendorList.find(
+                    (pv) =>
+                      pv.vendorId === inlineVariationModal.preferredVendorId,
+                  ) ||
+                  productVendorList.find((pv) => pv.isPrimary) ||
+                  productVendorList[0];
+                const modelNumber =
+                  variation.effectiveModelNumber ||
+                  variation.modelNumber ||
+                  inlineVariationModal.product.modelNumber ||
+                  "-";
+                const colorFinish = [variation.color, variation.finish]
+                  .filter(Boolean)
+                  .join(" / ");
+                const variationSku =
+                  preferredVendor?.variationSkus?.[variation.id] ||
+                  preferredVendor?.sku ||
+                  "-";
+                const costLabel = preferredVendor
+                  ? `$${applyVendorTaxRate(preferredVendor.cost, preferredVendor.vendorId).toFixed(2)}`
+                  : "-";
+                const isSelected =
+                  inlineVariationModal.selectedVariationId === variation.id;
+
+                return (
+                  <button
+                    key={variation.id}
+                    type="button"
+                    onClick={() =>
+                      setInlineVariationModal((current) =>
+                        current
+                          ? {
+                              ...current,
+                              selectedVariationId: variation.id,
+                            }
+                          : current,
+                      )
+                    }
+                    className={`w-full rounded-md border px-2.5 py-1.5 text-left transition ${
+                      isSelected
+                        ? "border-indigo-500 bg-indigo-50"
+                        : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    <div className="grid grid-cols-[24px_minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,0.9fr)_92px] items-center gap-2">
+                      <div className="flex items-center justify-center">
+                        <span
+                          className={`h-3.5 w-3.5 rounded-full border ${
+                            isSelected
+                              ? "border-indigo-600 bg-indigo-600"
+                              : "border-gray-300 bg-white"
+                          }`}
+                        >
+                          {isSelected ? (
+                            <span className="block h-full w-full rounded-full border-2 border-indigo-600 bg-white scale-[0.45]" />
+                          ) : null}
+                        </span>
+                      </div>
+                      <div className="min-w-0">
+                        <div className="truncate text-xs font-semibold text-gray-900">
+                          {modelNumber}
+                        </div>
+                      </div>
+                      <div className="min-w-0">
+                        <div className="truncate text-[11px] text-gray-500">
+                          {colorFinish || "Default"}
+                        </div>
+                      </div>
+                      <div className="min-w-0">
+                        <div className="truncate text-[11px] text-gray-500">
+                          {variationSku}
+                        </div>
+                      </div>
+                      <div className="text-right text-[11px] font-medium text-gray-700">
+                        {costLabel}
+                      </div>
+                      {isSelected && <span className="sr-only">Selected</span>}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex justify-end gap-2 border-t border-gray-200 px-5 py-4">
+              <button
+                type="button"
+                onClick={() => resolveInlineVariationModal(undefined)}
+                className="px-3 py-1 text-xs text-gray-700 hover:text-gray-900"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  resolveInlineVariationModal(
+                    inlineVariationModal.variations.find(
+                      (variation) =>
+                        variation.id ===
+                        inlineVariationModal.selectedVariationId,
+                    ) || undefined,
+                  )
+                }
+                className="rounded-md bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700"
+              >
+                Use Selected Variation
+              </button>
             </div>
           </div>
         </div>

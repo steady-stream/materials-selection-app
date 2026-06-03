@@ -4,8 +4,14 @@ import { projectService, salesforceService } from "../services";
 import type {
     CreateProjectRequest,
     Project,
+    SalesforceOpportunityFilters,
     SalesforceOpportunity,
 } from "../types";
+
+const defaultOpportunityFilters: SalesforceOpportunityFilters = {
+  selectionCoordinatorNeeded: true,
+  stage: "",
+};
 
 const ProjectList = () => {
   const navigate = useNavigate();
@@ -20,6 +26,9 @@ const ProjectList = () => {
     [],
   );
   const [loadingOpportunities, setLoadingOpportunities] = useState(false);
+  const [opportunityFilters, setOpportunityFilters] =
+    useState<SalesforceOpportunityFilters>(defaultOpportunityFilters);
+  const [opportunitySearch, setOpportunitySearch] = useState("");
   const [showSalesforceForm, setShowSalesforceForm] = useState(false);
   const [savingSalesforceProject, setSavingSalesforceProject] = useState(false);
   const [savingProject, setSavingProject] = useState(false);
@@ -107,12 +116,14 @@ const ProjectList = () => {
     setShowModal(true);
   };
 
-  const handleOpenSalesforceModal = async () => {
-    setShowSalesforceModal(true);
+  const loadOpportunities = async (
+    filters: SalesforceOpportunityFilters = opportunityFilters,
+  ) => {
     setLoadingOpportunities(true);
     try {
-      const opps = await salesforceService.getOpportunities();
+      const opps = await salesforceService.getOpportunities(filters);
       setOpportunities(opps);
+      setOpportunityFilters(filters);
     } catch (err) {
       console.error("Error loading opportunities:", err);
       alert("Failed to load Salesforce opportunities. Please try again.");
@@ -121,10 +132,16 @@ const ProjectList = () => {
     }
   };
 
+  const handleOpenSalesforceModal = async () => {
+    setShowSalesforceModal(true);
+    await loadOpportunities();
+  };
+
   const handleCloseSalesforceModal = () => {
     setShowSalesforceModal(false);
     setShowSalesforceForm(false);
     setOpportunities([]);
+    setOpportunitySearch("");
     setFormData({
       name: "",
       description: "",
@@ -279,6 +296,10 @@ const ProjectList = () => {
       </div>
     );
   }
+
+  const filteredOpportunities = opportunities.filter((opportunity) =>
+    opportunity.Name.toLowerCase().includes(opportunitySearch.toLowerCase()),
+  );
 
   if (error) {
     return (
@@ -953,12 +974,122 @@ const ProjectList = () => {
                 Loading opportunities...
               </div>
             ) : opportunities.length === 0 ? (
-              <div className="text-center py-8 text-gray-500 text-xs">
-                No Salesforce opportunities found where Selection Coordinator is
-                needed.
-              </div>
+              <>
+                <div className="mb-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
+                    <label className="flex items-center gap-2 text-xs text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={opportunityFilters.selectionCoordinatorNeeded ?? true}
+                        onChange={(e) =>
+                          setOpportunityFilters((prev) => ({
+                            ...prev,
+                            selectionCoordinatorNeeded: e.target.checked,
+                          }))
+                        }
+                        className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      Selection Coordinator Needed
+                    </label>
+                    <div>
+                      <label className="mb-1 block text-[11px] font-medium text-gray-700">
+                        Stage filter
+                      </label>
+                      <input
+                        type="text"
+                        value={opportunityFilters.stage || ""}
+                        onChange={(e) =>
+                          setOpportunityFilters((prev) => ({
+                            ...prev,
+                            stage: e.target.value,
+                          }))
+                        }
+                        placeholder="Any stage"
+                        className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[11px] font-medium text-gray-700">
+                        Search name
+                      </label>
+                      <input
+                        type="text"
+                        value={opportunitySearch}
+                        onChange={(e) => setOpportunitySearch(e.target.value)}
+                        placeholder="Search opportunity name"
+                        className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => loadOpportunities(opportunityFilters)}
+                      className="rounded-md bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700"
+                    >
+                      Apply
+                    </button>
+                  </div>
+                </div>
+                <div className="text-center py-8 text-gray-500 text-xs">
+                  No Salesforce opportunities found for the current filters.
+                </div>
+              </>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+                <div className="mb-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
+                    <label className="flex items-center gap-2 text-xs text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={opportunityFilters.selectionCoordinatorNeeded ?? true}
+                        onChange={(e) =>
+                          setOpportunityFilters((prev) => ({
+                            ...prev,
+                            selectionCoordinatorNeeded: e.target.checked,
+                          }))
+                        }
+                        className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      Selection Coordinator Needed
+                    </label>
+                    <div>
+                      <label className="mb-1 block text-[11px] font-medium text-gray-700">
+                        Stage filter
+                      </label>
+                      <input
+                        type="text"
+                        value={opportunityFilters.stage || ""}
+                        onChange={(e) =>
+                          setOpportunityFilters((prev) => ({
+                            ...prev,
+                            stage: e.target.value,
+                          }))
+                        }
+                        placeholder="Any stage"
+                        className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[11px] font-medium text-gray-700">
+                        Search name
+                      </label>
+                      <input
+                        type="text"
+                        value={opportunitySearch}
+                        onChange={(e) => setOpportunitySearch(e.target.value)}
+                        placeholder="Search opportunity name"
+                        className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => loadOpportunities(opportunityFilters)}
+                      className="rounded-md bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700"
+                    >
+                      Apply
+                    </button>
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
                 <table className="min-w-full text-xs">
                   <thead className="bg-gray-100 border-b border-gray-200">
                     <tr>
@@ -974,7 +1105,7 @@ const ProjectList = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {opportunities.map((opp) => (
+                    {filteredOpportunities.map((opp) => (
                       <tr
                         key={opp.Id}
                         className="border-b border-gray-200 hover:bg-gray-50"
@@ -994,9 +1125,20 @@ const ProjectList = () => {
                         </td>
                       </tr>
                     ))}
+                    {filteredOpportunities.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={3}
+                          className="px-2 py-6 text-center text-xs text-gray-500"
+                        >
+                          No opportunities match the current name search.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
-              </div>
+                </div>
+              </>
             )}
 
             {!showSalesforceForm && (

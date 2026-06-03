@@ -54,7 +54,44 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
 
   // Selected options state
   const [selectedOptions, setSelectedOptions] = useState<LineItemOption[]>([]);
+  const [optionVariationByProduct, setOptionVariationByProduct] = useState<
+    Record<string, string>
+  >({});
   const [loading, setLoading] = useState(true);
+
+  const resolveOptionVariation = (product: Product) => {
+    const variations = product.variations || [];
+    if (variations.length === 0) return null;
+    if (variations.length === 1) return variations[0];
+
+    const selectedVariationId = optionVariationByProduct[product.id];
+    if (!selectedVariationId) return null;
+
+    return (
+      variations.find((variation) => variation.id === selectedVariationId) ||
+      null
+    );
+  };
+
+  const getEffectiveModelNumber = (
+    product?: Product,
+    variationId?: string | null,
+    optionModelNumber?: string,
+  ) => {
+    if (optionModelNumber) return optionModelNumber;
+    if (!product) return "-";
+
+    const selectedVariation = (product.variations || []).find(
+      (variation) => variation.id === variationId,
+    );
+
+    return (
+      selectedVariation?.effectiveModelNumber ||
+      selectedVariation?.modelNumber ||
+      product.modelNumber ||
+      "-"
+    );
+  };
 
   // Load existing options
   useEffect(() => {
@@ -76,6 +113,17 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
   // Add product as option
   const handleAddOption = async (product: Product) => {
     try {
+      const selectedVariation = resolveOptionVariation(product);
+      if ((product.variations || []).length > 1 && !selectedVariation) {
+        alert("Please select a variation before adding this option");
+        return;
+      }
+
+      const selectedModelNumber = getEffectiveModelNumber(
+        product,
+        selectedVariation?.id,
+      );
+
       // Get primary vendor cost
       const productVendorList = productVendors.filter(
         (pv) => pv.productId === product.id,
@@ -90,6 +138,8 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
 
       const optionData: CreateLineItemOptionRequest = {
         productId: product.id,
+        productVariationId: selectedVariation?.id,
+        modelNumber: selectedModelNumber,
         unitCost: primaryPV.cost,
       };
 
@@ -133,13 +183,24 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
       // Use the new selectOption endpoint that handles everything
       await lineItemOptionService.selectOption(lineItem.id, {
         productId: product.id,
+        productVariationId: option.productVariationId,
+        modelNumber: getEffectiveModelNumber(
+          product,
+          option.productVariationId,
+          option.modelNumber,
+        ),
         unitCost: option.unitCost,
       });
 
       // Update line item with selected product (for denormalized cache)
       await lineItemService.update(lineItem.id, {
         productId: product.id,
-        modelNumber: product.modelNumber,
+        productVariationId: option.productVariationId || null,
+        modelNumber: getEffectiveModelNumber(
+          product,
+          option.productVariationId,
+          option.modelNumber,
+        ),
         manufacturerId: product.manufacturerId,
         vendorId: primaryPV?.vendorId,
         unitCost: option.unitCost,
@@ -173,13 +234,24 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
 
       await lineItemOptionService.selectOption(lineItem.id, {
         productId: product.id,
+        productVariationId: option.productVariationId,
+        modelNumber: getEffectiveModelNumber(
+          product,
+          option.productVariationId,
+          option.modelNumber,
+        ),
         unitCost: option.unitCost,
       });
 
       // Set status to "final" instead of "selected"
       await lineItemService.update(lineItem.id, {
         productId: product.id,
-        modelNumber: product.modelNumber,
+        productVariationId: option.productVariationId || null,
+        modelNumber: getEffectiveModelNumber(
+          product,
+          option.productVariationId,
+          option.modelNumber,
+        ),
         manufacturerId: product.manufacturerId,
         vendorId: primaryPV?.vendorId,
         unitCost: option.unitCost,
@@ -205,6 +277,7 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
       // Clear line item product selection
       await lineItemService.update(lineItem.id, {
         productId: null,
+        productVariationId: null,
         modelNumber: null,
         manufacturerId: null,
         vendorId: null,
@@ -223,8 +296,15 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
   };
 
   // Check if product is already an option
-  const isProductSelected = (productId: string) => {
-    return selectedOptions.some((opt) => opt.productId === productId);
+  const isProductSelected = (
+    productId: string,
+    productVariationId?: string | null,
+  ) => {
+    return selectedOptions.some(
+      (opt) =>
+        opt.productId === productId &&
+        (opt.productVariationId || null) === (productVariationId || null),
+    );
   };
 
   // Filter products
@@ -358,6 +438,9 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
                       Model
                     </th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">
+                      Variation
+                    </th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">
                       Manufacturer
                     </th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">
@@ -392,6 +475,9 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
                           (pv) => pv.productId === product.id,
                         )
                       : [];
+                    const selectedVariation = product?.variations?.find(
+                      (variation) => variation.id === option.productVariationId,
+                    );
                     const primaryPV =
                       productVendorList.find((pv) => pv.isPrimary) ||
                       productVendorList[0];
@@ -421,7 +507,23 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
                           </div>
                         </td>
                         <td className="px-3 py-2 text-xs text-gray-600">
-                          {product?.modelNumber || "-"}
+                          {getEffectiveModelNumber(
+                            product,
+                            option.productVariationId,
+                            option.modelNumber,
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-xs text-gray-600">
+                          {selectedVariation
+                            ? [
+                                selectedVariation.color,
+                                selectedVariation.finish,
+                              ]
+                                .filter(Boolean)
+                                .join(" / ") || "Default"
+                            : option.productVariationId
+                              ? "Variation"
+                              : "Default"}
                         </td>
                         <td className="px-3 py-2 text-xs text-gray-600">
                           {manufacturer?.name || "-"}
@@ -708,6 +810,9 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
                     Unit
                   </th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">
+                    Variation
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">
                     Action
                   </th>
                 </tr>
@@ -724,7 +829,21 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
                     const primaryPV =
                       productVendorList.find((pv) => pv.isPrimary) ||
                       productVendorList[0];
-                    const alreadySelected = isProductSelected(product.id);
+                    const variationCount = product.variations?.length || 0;
+                    const hasMultipleVariations = variationCount > 1;
+                    const selectedVariationId =
+                      optionVariationByProduct[product.id] ||
+                      (variationCount === 1 ? product.variations?.[0]?.id : "");
+                    const selectedVariation = (product.variations || []).find(
+                      (variation) => variation.id === selectedVariationId,
+                    );
+                    const hasRequiredVariationSelection =
+                      !hasMultipleVariations ||
+                      Boolean(optionVariationByProduct[product.id]);
+                    const alreadySelected = isProductSelected(
+                      product.id,
+                      selectedVariationId || null,
+                    );
 
                     return (
                       <tr
@@ -948,6 +1067,62 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
                         <td className="px-3 py-2 text-xs text-gray-600">
                           {product.unit || "-"}
                         </td>
+                        <td className="px-3 py-2 text-xs text-gray-600">
+                          {hasMultipleVariations ? (
+                            <select
+                              value={selectedVariationId || ""}
+                              onChange={(e) =>
+                                setOptionVariationByProduct((prev) => ({
+                                  ...prev,
+                                  [product.id]: e.target.value,
+                                }))
+                              }
+                              className={`w-full min-w-[180px] px-2 py-1 text-xs border rounded-md focus:ring-2 ${
+                                selectedVariationId
+                                  ? "border-gray-300 focus:ring-indigo-500"
+                                  : "border-amber-400 bg-amber-50 focus:ring-amber-500"
+                              }`}
+                            >
+                              <option value="">
+                                Select variation (required)...
+                              </option>
+                              {product.variations?.map((variation) => {
+                                const effectiveModel =
+                                  variation.effectiveModelNumber ||
+                                  variation.modelNumber ||
+                                  product.modelNumber ||
+                                  "-";
+                                const colorFinish = [
+                                  variation.color,
+                                  variation.finish,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" / ");
+                                return (
+                                  <option
+                                    key={variation.id}
+                                    value={variation.id}
+                                  >
+                                    {colorFinish
+                                      ? `${effectiveModel} - ${colorFinish}`
+                                      : effectiveModel}
+                                  </option>
+                                );
+                              })}
+                            </select>
+                          ) : selectedVariation ? (
+                            <span>
+                              {[
+                                selectedVariation.color,
+                                selectedVariation.finish,
+                              ]
+                                .filter(Boolean)
+                                .join(" / ") || "Default"}
+                            </span>
+                          ) : (
+                            <span>Default</span>
+                          )}
+                        </td>
                         <td className="px-3 py-2 text-xs">
                           {alreadySelected ? (
                             <span className="text-green-600 font-medium">
@@ -956,7 +1131,7 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
                           ) : (
                             <button
                               onClick={() => handleAddOption(product)}
-                              disabled={!primaryPV}
+                              disabled={!hasRequiredVariationSelection}
                               className="bg-green-600 text-white px-3 py-1 rounded text-xs hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
                             >
                               Add
@@ -969,7 +1144,7 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
                 ) : (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={10}
                       className="px-3 py-8 text-center text-xs text-gray-500"
                     >
                       No products found matching your filters

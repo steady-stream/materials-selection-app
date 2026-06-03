@@ -1,5 +1,10 @@
 # Materials Selection App - Deployment Summary
 
+> STALE DOCUMENT NOTICE (2026-06-03)
+>
+> This file is retained for historical context and is no longer the source of truth.
+> Use docs/CURRENT-STATUS-2026-06-03.md for current deployment and environment status.
+
 **Last Updated**: February 2, 2026  
 **Status**: ✅ Fully Deployed with Enhanced Features
 

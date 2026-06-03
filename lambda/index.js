@@ -2196,12 +2196,25 @@ async function createProductVendor(data) {
     }
   }
 
+  const variationSkus =
+    data.variationSkus && typeof data.variationSkus === "object"
+      ? Object.fromEntries(
+          Object.entries(data.variationSkus).filter(
+            ([variationId, sku]) => variationId && String(sku || "").trim(),
+          ),
+        )
+      : undefined;
+
   const productVendor = {
     id: randomUUID(),
     productId: data.productId,
     vendorId: data.vendorId,
     cost: data.cost,
     sku: data.sku || null,
+    variationSkus:
+      variationSkus && Object.keys(variationSkus).length > 0
+        ? variationSkus
+        : undefined,
     isPrimary,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -2256,9 +2269,24 @@ async function updateProductVendor(id, data) {
     }
   }
 
+  const variationSkus =
+    data.variationSkus && typeof data.variationSkus === "object"
+      ? Object.fromEntries(
+          Object.entries(data.variationSkus).filter(
+            ([variationId, sku]) => variationId && String(sku || "").trim(),
+          ),
+        )
+      : undefined;
+
   const productVendor = {
     ...getResult.Item,
     ...data,
+    ...(data.variationSkus !== undefined && {
+      variationSkus:
+        variationSkus && Object.keys(variationSkus).length > 0
+          ? variationSkus
+          : undefined,
+    }),
     id,
     updatedAt: new Date().toISOString(),
   };
