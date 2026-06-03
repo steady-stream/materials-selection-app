@@ -1,6 +1,6 @@
 # Materials Selection App - Current Status (Canonical)
 
-Last updated: 2026-06-03
+Last updated: 2026-06-03 (evening)
 Owner: APIA Consulting
 Scope: WebPrototype repository state + latest handoff/deploy evidence
 
@@ -72,6 +72,27 @@ Primary evidence used:
 ---
 
 ## Delivery Status
+
+### Release update (2026-06-03 evening)
+
+- Production incident fixed: add-product failures traced to missing DynamoDB table `MaterialsSelection-ProductVariations` in prod account.
+- Created missing production table and GSI:
+  - Table: `MaterialsSelection-ProductVariations`
+  - GSI: `ProductIdIndex`
+- Post-fix validation completed in production:
+  - Product create endpoint returned `201`
+  - Temporary debug record cleanup returned `204`
+- Salesforce Opportunity filtering UX refinement promoted:
+  - Stage filter switched to single-select in selection modals
+  - Opportunity name search repositioned below filter/apply row
+- Product catalog UX refinement promoted:
+  - Main list now exposes multiple variation image links (not only first variation image)
+  - Hover detail no longer shows misleading first-variation color/finish for multi-variation products
+  - Hover detail links removed (non-interactive hover behavior)
+- Deployment evidence:
+  - Test deploy invalidations: `I3TLVAPT1XUMA8789WM7OE3MW0`, `IBRW2CDG7GIJG7N4NQ4URKF88J`
+  - Production deploy invalidations: `I3FHAEH7YZ60M5TRA3FFPSB2EU`, `I62M8GSHPXAH693Z29PKDYDPUO`
+  - Production URL verified after release: https://d377ynyh0ngsji.cloudfront.net
 
 ### Completed and deployed (latest confirmed)
 

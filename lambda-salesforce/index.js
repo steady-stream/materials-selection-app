@@ -103,6 +103,27 @@ async function querySalesforce(query) {
   }
 }
 
+async function getSalesforceResource(resourcePath) {
+  const token = await getSalesforceToken();
+  const instanceUrl = process.env.SF_INSTANCE_URL;
+  const url = `${instanceUrl}/services/data/v59.0${resourcePath}`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Salesforce request failed: ${response.status} - ${error}`);
+  }
+
+  return response.json();
+}
+
 function escapeSoqlString(value) {
   return String(value || "")
     .replace(/\\/g, "\\\\")
@@ -119,10 +140,15 @@ async function getOpportunities(filters = {}) {
     whereClauses.push("Selection_Coordinator_Needed__c = true");
   }
 
-  if (filters.stage) {
-    whereClauses.push(
-      `StageName LIKE '%${escapeSoqlString(filters.stage)}%'`,
-    );
+  const stageValues = Array.isArray(filters.stages)
+    ? filters.stages.filter(Boolean)
+    : [];
+
+  if (stageValues.length > 0) {
+    const escapedStages = stageValues
+      .map((stage) => `'${escapeSoqlString(stage)}'`)
+      .join(", ");
+    whereClauses.push(`StageName IN (${escapedStages})`);
   }
 
   const whereSql =
@@ -137,6 +163,26 @@ async function getOpportunities(filters = {}) {
 
   const opportunities = await querySalesforce(query);
   return opportunities;
+}
+
+async function getOpportunityStageOptions() {
+  const metadata = await getSalesforceResource(
+    "/sobjects/Opportunity/describe",
+  );
+  const stageField = metadata.fields?.find(
+    (field) => field.name === "StageName",
+  );
+
+  if (!stageField || !Array.isArray(stageField.picklistValues)) {
+    return [];
+  }
+
+  return stageField.picklistValues
+    .filter((option) => option.active)
+    .map((option) => ({
+      label: option.label,
+      value: option.value,
+    }));
 }
 
 /**
@@ -210,18 +256,42 @@ exports.handler = async (event) => {
   }
 
   try {
-    const { httpMethod, path, pathParameters, queryStringParameters } = event;
+    const {
+      httpMethod,
+      path,
+      pathParameters,
+      queryStringParameters,
+      multiValueQueryStringParameters,
+    } = event;
+
+    if (httpMethod === "GET" && path === "/salesforce/opportunities/stages") {
+      const stageOptions = await getOpportunityStageOptions();
+
+      return {
+        statusCode: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({ stageOptions }),
+      };
+    }
 
     // GET /salesforce/opportunities - List all opportunities
     if (httpMethod === "GET" && path === "/salesforce/opportunities") {
       const selectionCoordinatorNeededParam =
         queryStringParameters?.selectionCoordinatorNeeded;
+      const stageParams = Array.isArray(multiValueQueryStringParameters?.stage)
+        ? multiValueQueryStringParameters.stage
+        : queryStringParameters?.stage
+          ? queryStringParameters.stage
+              .split(",")
+              .map((stage) => stage.trim())
+              .filter(Boolean)
+          : [];
       const opportunities = await getOpportunities({
         selectionCoordinatorNeeded:
           selectionCoordinatorNeededParam === undefined
             ? true
             : selectionCoordinatorNeededParam === "true",
-        stage: queryStringParameters?.stage?.trim() || undefined,
+        stages: stageParams,
       });
 
       return {

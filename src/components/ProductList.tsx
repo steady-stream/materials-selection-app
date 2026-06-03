@@ -95,6 +95,47 @@ const getVariationModelLabel = (
   return variation.modelNumber || baseModelNumber || "(inherits base model)";
 };
 
+type ProductImageLink = {
+  url: string;
+  label: string;
+};
+
+const getProductImageLinks = (product: Product): ProductImageLink[] => {
+  const links: ProductImageLink[] = [];
+  const seen = new Set<string>();
+
+  (product.variations || [])
+    .slice()
+    .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+    .forEach((variation, index) => {
+      const url = (variation.imageUrl || "").trim();
+      if (!url || seen.has(url)) return;
+      seen.add(url);
+
+      const model =
+        variation.effectiveModelNumber ||
+        variation.modelNumber ||
+        product.modelNumber ||
+        "";
+      const colorFinish = [variation.color, variation.finish]
+        .filter(Boolean)
+        .join(" / ");
+      const descriptor = colorFinish || `Variation ${index + 1}`;
+
+      links.push({
+        url,
+        label: model ? `${model} (${descriptor})` : descriptor,
+      });
+    });
+
+  const baseImageUrl = (product.imageUrl || "").trim();
+  if (baseImageUrl && !seen.has(baseImageUrl)) {
+    links.push({ url: baseImageUrl, label: "Base image" });
+  }
+
+  return links;
+};
+
 const sanitizeVariationSkuMap = (variationSkus: Record<string, string>) => {
   const cleaned = Object.fromEntries(
     Object.entries(variationSkus).filter(
@@ -1396,6 +1437,7 @@ const ProductList = () => {
                   ? vendors.find((v) => v.id === primaryVendor.vendorId)?.name
                   : null;
                 const hasSecondaryVendors = productVendorList.length > 1;
+                const imageLinks = getProductImageLinks(product);
                 return (
                   <tr
                     key={product.id}
@@ -1572,16 +1614,48 @@ const ProductList = () => {
                             🔗
                           </a>
                         )}
-                        {product.imageUrl && (
+                        {imageLinks.length === 1 && (
                           <a
-                            href={product.imageUrl}
+                            href={imageLinks[0].url}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-indigo-600 hover:text-indigo-900"
                             onClick={(e) => e.stopPropagation()}
+                            title={imageLinks[0].label}
                           >
                             🖼️
                           </a>
+                        )}
+                        {imageLinks.length > 1 && (
+                          <details
+                            className="relative"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <summary
+                              className="cursor-pointer list-none text-indigo-600 hover:text-indigo-900"
+                              title={`${imageLinks.length} variation images`}
+                            >
+                              🖼️ {imageLinks.length}
+                            </summary>
+                            <div className="absolute right-0 z-30 mt-1 w-64 rounded-md border border-gray-200 bg-white p-2 shadow-lg">
+                              <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                                Variation images
+                              </div>
+                              <div className="space-y-1">
+                                {imageLinks.map((link, index) => (
+                                  <a
+                                    key={`${product.id}-image-link-${index}`}
+                                    href={link.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="block truncate text-[11px] text-indigo-600 hover:underline"
+                                  >
+                                    {link.label} ↗
+                                  </a>
+                                ))}
+                              </div>
+                            </div>
+                          </details>
                         )}
                       </div>
                     </td>
@@ -1720,16 +1794,24 @@ const ProductList = () => {
                                 <span>{product.collection}</span>
                               </>
                             )}
-                            {product.color && (
+                            {!hasMultipleVariations && product.color && (
                               <>
                                 <span className="text-gray-500">Color:</span>
                                 <span>{product.color}</span>
                               </>
                             )}
-                            {product.finish && (
+                            {!hasMultipleVariations && product.finish && (
                               <>
                                 <span className="text-gray-500">Finish:</span>
                                 <span>{product.finish}</span>
+                              </>
+                            )}
+                            {hasMultipleVariations && (
+                              <>
+                                <span className="text-gray-500">
+                                  Color/Finish:
+                                </span>
+                                <span>Varies by variation</span>
                               </>
                             )}
                           </div>
@@ -1768,28 +1850,6 @@ const ProductList = () => {
                               })}
                             </div>
                           )}
-                          <div className="mt-2 flex gap-3">
-                            {product.productUrl && (
-                              <a
-                                href={product.productUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="pointer-events-auto text-indigo-600 hover:underline"
-                              >
-                                Product page ↗
-                              </a>
-                            )}
-                            {product.imageUrl && (
-                              <a
-                                href={product.imageUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="pointer-events-auto text-indigo-600 hover:underline"
-                              >
-                                Image ↗
-                              </a>
-                            )}
-                          </div>
                         </div>
                       </td>
                     )}

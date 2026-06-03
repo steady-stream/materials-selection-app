@@ -4,14 +4,15 @@ import { projectService, salesforceService } from "../services";
 import type {
     CreateProjectRequest,
     OpportunityDetails,
-    SalesforceOpportunityFilters,
     SalesforceOpportunity,
+    SalesforceOpportunityFilters,
+    SalesforcePicklistOption,
     UpdateProjectRequest,
 } from "../types";
 
 const defaultOpportunityFilters: SalesforceOpportunityFilters = {
   selectionCoordinatorNeeded: true,
-  stage: "",
+  stages: [],
 };
 
 const ProjectForm = () => {
@@ -33,6 +34,9 @@ const ProjectForm = () => {
     [],
   );
   const [loadingOpportunities, setLoadingOpportunities] = useState(false);
+  const [stageOptions, setStageOptions] = useState<SalesforcePicklistOption[]>(
+    [],
+  );
   const [opportunityFilters, setOpportunityFilters] =
     useState<SalesforceOpportunityFilters>(defaultOpportunityFilters);
   const [opportunitySearch, setOpportunitySearch] = useState("");
@@ -91,6 +95,7 @@ const ProjectForm = () => {
 
     if (newValue) {
       if (opportunities.length === 0) {
+        await loadStageOptions();
         await loadOpportunities();
       } else {
         setShowOpportunityModal(true);
@@ -126,6 +131,24 @@ const ProjectForm = () => {
     } finally {
       setLoadingOpportunities(false);
     }
+  };
+
+  const loadStageOptions = async () => {
+    try {
+      const options = await salesforceService.getOpportunityStageOptions();
+      setStageOptions(options);
+    } catch (err) {
+      console.error("Error loading Salesforce stage options:", err);
+      setError("Failed to load Salesforce opportunity stages");
+    }
+  };
+
+  const handleStageFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const selectedStage = e.target.value;
+    setOpportunityFilters((prev) => ({
+      ...prev,
+      stages: selectedStage ? [selectedStage] : [],
+    }));
   };
 
   const filteredOpportunities = opportunities.filter((opportunity) =>
@@ -296,11 +319,13 @@ const ProjectForm = () => {
               </h3>
 
               <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-4">
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-end">
                   <label className="flex items-center gap-2 text-sm text-gray-700">
                     <input
                       type="checkbox"
-                      checked={opportunityFilters.selectionCoordinatorNeeded ?? true}
+                      checked={
+                        opportunityFilters.selectionCoordinatorNeeded ?? true
+                      }
                       onChange={(e) =>
                         setOpportunityFilters((prev) => ({
                           ...prev,
@@ -315,30 +340,21 @@ const ProjectForm = () => {
                     <label className="mb-1 block text-xs font-medium text-gray-700">
                       Stage filter
                     </label>
-                    <input
-                      type="text"
-                      value={opportunityFilters.stage || ""}
-                      onChange={(e) =>
-                        setOpportunityFilters((prev) => ({
-                          ...prev,
-                          stage: e.target.value,
-                        }))
-                      }
-                      placeholder="Any stage"
+                    <select
+                      value={opportunityFilters.stages?.[0] || ""}
+                      onChange={handleStageFilterChange}
                       className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-gray-700">
-                      Search name
-                    </label>
-                    <input
-                      type="text"
-                      value={opportunitySearch}
-                      onChange={(e) => setOpportunitySearch(e.target.value)}
-                      placeholder="Search opportunity name"
-                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
-                    />
+                    >
+                      <option value="">All stages</option>
+                      {stageOptions.map((stageOption) => (
+                        <option
+                          key={stageOption.value}
+                          value={stageOption.value}
+                        >
+                          {stageOption.label}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <button
                     type="button"
@@ -348,6 +364,18 @@ const ProjectForm = () => {
                   >
                     {loadingOpportunities ? "Loading..." : "Apply"}
                   </button>
+                </div>
+                <div className="mt-3">
+                  <label className="mb-1 block text-xs font-medium text-gray-700">
+                    Search name
+                  </label>
+                  <input
+                    type="text"
+                    value={opportunitySearch}
+                    onChange={(e) => setOpportunitySearch(e.target.value)}
+                    placeholder="Search opportunity name"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
+                  />
                 </div>
               </div>
 

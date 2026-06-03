@@ -4,13 +4,14 @@ import { projectService, salesforceService } from "../services";
 import type {
     CreateProjectRequest,
     Project,
-    SalesforceOpportunityFilters,
     SalesforceOpportunity,
+    SalesforceOpportunityFilters,
+    SalesforcePicklistOption,
 } from "../types";
 
 const defaultOpportunityFilters: SalesforceOpportunityFilters = {
   selectionCoordinatorNeeded: true,
-  stage: "",
+  stages: [],
 };
 
 const ProjectList = () => {
@@ -26,6 +27,9 @@ const ProjectList = () => {
     [],
   );
   const [loadingOpportunities, setLoadingOpportunities] = useState(false);
+  const [stageOptions, setStageOptions] = useState<SalesforcePicklistOption[]>(
+    [],
+  );
   const [opportunityFilters, setOpportunityFilters] =
     useState<SalesforceOpportunityFilters>(defaultOpportunityFilters);
   const [opportunitySearch, setOpportunitySearch] = useState("");
@@ -132,8 +136,27 @@ const ProjectList = () => {
     }
   };
 
+  const loadStageOptions = async () => {
+    try {
+      const options = await salesforceService.getOpportunityStageOptions();
+      setStageOptions(options);
+    } catch (err) {
+      console.error("Error loading Salesforce stage options:", err);
+      alert("Failed to load Salesforce opportunity stages. Please try again.");
+    }
+  };
+
+  const handleStageFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const selectedStage = e.target.value;
+    setOpportunityFilters((prev) => ({
+      ...prev,
+      stages: selectedStage ? [selectedStage] : [],
+    }));
+  };
+
   const handleOpenSalesforceModal = async () => {
     setShowSalesforceModal(true);
+    await loadStageOptions();
     await loadOpportunities();
   };
 
@@ -976,11 +999,13 @@ const ProjectList = () => {
             ) : opportunities.length === 0 ? (
               <>
                 <div className="mb-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-end">
                     <label className="flex items-center gap-2 text-xs text-gray-700">
                       <input
                         type="checkbox"
-                        checked={opportunityFilters.selectionCoordinatorNeeded ?? true}
+                        checked={
+                          opportunityFilters.selectionCoordinatorNeeded ?? true
+                        }
                         onChange={(e) =>
                           setOpportunityFilters((prev) => ({
                             ...prev,
@@ -995,30 +1020,21 @@ const ProjectList = () => {
                       <label className="mb-1 block text-[11px] font-medium text-gray-700">
                         Stage filter
                       </label>
-                      <input
-                        type="text"
-                        value={opportunityFilters.stage || ""}
-                        onChange={(e) =>
-                          setOpportunityFilters((prev) => ({
-                            ...prev,
-                            stage: e.target.value,
-                          }))
-                        }
-                        placeholder="Any stage"
+                      <select
+                        value={opportunityFilters.stages?.[0] || ""}
+                        onChange={handleStageFilterChange}
                         className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-[11px] font-medium text-gray-700">
-                        Search name
-                      </label>
-                      <input
-                        type="text"
-                        value={opportunitySearch}
-                        onChange={(e) => setOpportunitySearch(e.target.value)}
-                        placeholder="Search opportunity name"
-                        className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
-                      />
+                      >
+                        <option value="">All stages</option>
+                        {stageOptions.map((stageOption) => (
+                          <option
+                            key={stageOption.value}
+                            value={stageOption.value}
+                          >
+                            {stageOption.label}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <button
                       type="button"
@@ -1027,6 +1043,18 @@ const ProjectList = () => {
                     >
                       Apply
                     </button>
+                  </div>
+                  <div className="mt-3">
+                    <label className="mb-1 block text-[11px] font-medium text-gray-700">
+                      Search name
+                    </label>
+                    <input
+                      type="text"
+                      value={opportunitySearch}
+                      onChange={(e) => setOpportunitySearch(e.target.value)}
+                      placeholder="Search opportunity name"
+                      className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
+                    />
                   </div>
                 </div>
                 <div className="text-center py-8 text-gray-500 text-xs">
@@ -1036,11 +1064,13 @@ const ProjectList = () => {
             ) : (
               <>
                 <div className="mb-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-end">
                     <label className="flex items-center gap-2 text-xs text-gray-700">
                       <input
                         type="checkbox"
-                        checked={opportunityFilters.selectionCoordinatorNeeded ?? true}
+                        checked={
+                          opportunityFilters.selectionCoordinatorNeeded ?? true
+                        }
                         onChange={(e) =>
                           setOpportunityFilters((prev) => ({
                             ...prev,
@@ -1055,30 +1085,21 @@ const ProjectList = () => {
                       <label className="mb-1 block text-[11px] font-medium text-gray-700">
                         Stage filter
                       </label>
-                      <input
-                        type="text"
-                        value={opportunityFilters.stage || ""}
-                        onChange={(e) =>
-                          setOpportunityFilters((prev) => ({
-                            ...prev,
-                            stage: e.target.value,
-                          }))
-                        }
-                        placeholder="Any stage"
+                      <select
+                        value={opportunityFilters.stages?.[0] || ""}
+                        onChange={handleStageFilterChange}
                         className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-[11px] font-medium text-gray-700">
-                        Search name
-                      </label>
-                      <input
-                        type="text"
-                        value={opportunitySearch}
-                        onChange={(e) => setOpportunitySearch(e.target.value)}
-                        placeholder="Search opportunity name"
-                        className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
-                      />
+                      >
+                        <option value="">All stages</option>
+                        {stageOptions.map((stageOption) => (
+                          <option
+                            key={stageOption.value}
+                            value={stageOption.value}
+                          >
+                            {stageOption.label}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <button
                       type="button"
@@ -1088,55 +1109,67 @@ const ProjectList = () => {
                       Apply
                     </button>
                   </div>
+                  <div className="mt-3">
+                    <label className="mb-1 block text-[11px] font-medium text-gray-700">
+                      Search name
+                    </label>
+                    <input
+                      type="text"
+                      value={opportunitySearch}
+                      onChange={(e) => setOpportunitySearch(e.target.value)}
+                      placeholder="Search opportunity name"
+                      className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
                 </div>
                 <div className="overflow-x-auto">
-                <table className="min-w-full text-xs">
-                  <thead className="bg-gray-100 border-b border-gray-200">
-                    <tr>
-                      <th className="px-2 py-1 text-left font-medium text-gray-600">
-                        Opportunity Name
-                      </th>
-                      <th className="px-2 py-1 text-left font-medium text-gray-600">
-                        Stage
-                      </th>
-                      <th className="px-2 py-1 text-left font-medium text-gray-600">
-                        Action
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredOpportunities.map((opp) => (
-                      <tr
-                        key={opp.Id}
-                        className="border-b border-gray-200 hover:bg-gray-50"
-                      >
-                        <td className="px-2 py-1">{opp.Name}</td>
-                        <td className="px-2 py-1 text-gray-600">
-                          {opp.StageName}
-                        </td>
-                        <td className="px-2 py-1">
-                          <button
-                            type="button"
-                            onClick={() => handleSelectOpportunity(opp.Id)}
-                            className="text-indigo-600 hover:text-indigo-800 font-medium"
-                          >
-                            Select
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                    {filteredOpportunities.length === 0 && (
+                  <table className="min-w-full text-xs">
+                    <thead className="bg-gray-100 border-b border-gray-200">
                       <tr>
-                        <td
-                          colSpan={3}
-                          className="px-2 py-6 text-center text-xs text-gray-500"
-                        >
-                          No opportunities match the current name search.
-                        </td>
+                        <th className="px-2 py-1 text-left font-medium text-gray-600">
+                          Opportunity Name
+                        </th>
+                        <th className="px-2 py-1 text-left font-medium text-gray-600">
+                          Stage
+                        </th>
+                        <th className="px-2 py-1 text-left font-medium text-gray-600">
+                          Action
+                        </th>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {filteredOpportunities.map((opp) => (
+                        <tr
+                          key={opp.Id}
+                          className="border-b border-gray-200 hover:bg-gray-50"
+                        >
+                          <td className="px-2 py-1">{opp.Name}</td>
+                          <td className="px-2 py-1 text-gray-600">
+                            {opp.StageName}
+                          </td>
+                          <td className="px-2 py-1">
+                            <button
+                              type="button"
+                              onClick={() => handleSelectOpportunity(opp.Id)}
+                              className="text-indigo-600 hover:text-indigo-800 font-medium"
+                            >
+                              Select
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {filteredOpportunities.length === 0 && (
+                        <tr>
+                          <td
+                            colSpan={3}
+                            className="px-2 py-6 text-center text-xs text-gray-500"
+                          >
+                            No opportunities match the current name search.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </>
             )}

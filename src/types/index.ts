@@ -429,7 +429,12 @@ export interface SalesforceOpportunity {
 
 export interface SalesforceOpportunityFilters {
   selectionCoordinatorNeeded?: boolean;
-  stage?: string;
+  stages?: string[];
+}
+
+export interface SalesforcePicklistOption {
+  label: string;
+  value: string;
 }
 
 export interface SalesforceAccount {

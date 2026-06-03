@@ -1,7 +1,8 @@
 import type {
-  OpportunityDetails,
-  SalesforceOpportunity,
-  SalesforceOpportunityFilters,
+    OpportunityDetails,
+    SalesforceOpportunity,
+    SalesforceOpportunityFilters,
+    SalesforcePicklistOption,
 } from "../types";
 
 // TODO: Update this to point to the new Salesforce Lambda API (separate from MaterialSelection-API)
@@ -25,18 +26,17 @@ export const salesforceService = {
           String(filters.selectionCoordinatorNeeded),
         );
       }
-      if (filters.stage?.trim()) {
-        queryParams.set("stage", filters.stage.trim());
+      for (const stage of filters.stages || []) {
+        if (stage.trim()) {
+          queryParams.append("stage", stage.trim());
+        }
       }
 
       const opportunitiesUrl = `${SF_API_BASE_URL}/salesforce/opportunities${
         queryParams.toString() ? `?${queryParams.toString()}` : ""
       }`;
 
-      console.log(
-        "Fetching from:",
-        opportunitiesUrl,
-      );
+      console.log("Fetching from:", opportunitiesUrl);
       const response = await fetch(opportunitiesUrl);
 
       console.log("Response status:", response.status);
@@ -59,6 +59,27 @@ export const salesforceService = {
       return opportunities;
     } catch (error) {
       console.error("Error fetching Salesforce opportunities:", error);
+      throw error;
+    }
+  },
+
+  getOpportunityStageOptions: async (): Promise<SalesforcePicklistOption[]> => {
+    try {
+      const response = await fetch(
+        `${SF_API_BASE_URL}/salesforce/opportunities/stages`,
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to fetch opportunity stages: ${response.statusText}`,
+        );
+      }
+
+      const data = await response.json();
+      const stageOptions = data.stageOptions || [];
+      return Array.isArray(stageOptions) ? stageOptions : [];
+    } catch (error) {
+      console.error("Error fetching Salesforce opportunity stages:", error);
       throw error;
     }
   },
