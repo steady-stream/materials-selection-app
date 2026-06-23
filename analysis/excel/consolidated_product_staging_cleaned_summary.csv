@@ -1,0 +1,8 @@
+metric,value
+input_rows,504
+output_rows_after_clean_dedupe,485
+names_changed,221
+descriptions_changed,290
+units_changed,34
+rows_with_any_change,331
+merged_after_clean,19

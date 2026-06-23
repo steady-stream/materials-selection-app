@@ -1,0 +1,11 @@
+workbook,total_candidate_rows,clean_rows,rows_with_model,unique_models,new_name_model_pairs_vs_baseline,new_models_vs_baseline
+Product_Master_Audit_Pass.xlsx,2555,2486,2486,586,1084,553
+Product_Master_Enhanced.xlsx,559,557,557,230,270,224
+Product_Master_Refined.xlsx,520,518,472,205,260,199
+normalized_products_db.xlsx,979,975,286,206,945,196
+normalized_products_db_v2.xlsx,240,240,226,206,240,196
+normalized_products_db_v2_cleaned_v3.xlsx,240,240,226,206,240,196
+compiled_products_db.xlsx,264,263,225,202,263,193
+Product_Master_Warehouse.xlsx,640,610,565,209,275,168
+Product_Master_Catalog_v3.xlsx,66,65,65,21,43,21
+Product_Master_Extract.xlsx,21,21,20,20,21,20

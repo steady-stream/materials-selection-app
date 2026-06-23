@@ -1,0 +1,12 @@
+metric,value
+input_rows,485
+kept_before_dedupe,408
+output_rows,408
+dropped_rows,77
+merged_duplicates,0
+dropped_desc-finance-rollup,2
+dropped_generic-name,8
+dropped_insufficient-identity-signal,42
+dropped_low-confidence,8
+dropped_name-finance-rollup,15
+dropped_name-numeric-only,2

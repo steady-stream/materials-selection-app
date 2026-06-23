@@ -1,0 +1,74 @@
+sheet,max_row,max_col,sample_nonempty_rows_first200,detected_header_row,header_hit_count,header_hits,model_like_hits_first200,url_hits_first200,numeric_hits_first200,mapped_field_count,mapped_fields,product_extract_signal_score,classification,recommendation,review_priority
+Frequent Material Model Price ,11,6,6,4,3,cost|item|model,17,2,2,4,description|modelNumber|name|price,18,reference/master,priority-reference-tab,1
+finishes,59,4,55,1,3,finish|manufacturer|model,129,0,9,4,color|finish|manufacturer|modelNumber,17,reference/master,priority-reference-tab,1
+Products ,6,5,1,1,5,description|finish|image|manufacturer|model,5,0,0,7,color|description|finish|imageUrl|manufacturer|modelNumber|url,17,reference/master,priority-reference-tab,1
+Vendor ,12,5,12,1,1,vendor,12,0,0,1,vendor,14,reference/master,priority-reference-tab,1
+Manufacturer ,8,5,8,1,1,manufacturer,8,0,0,1,manufacturer,12,reference/master,priority-reference-tab,1
+APIA ITEMS  ,14,3,14,1,1,item,14,0,0,1,name,12,likely_extractable,priority-reference-tab,1
+Service Products ,6,5,0,1,0,,0,0,0,0,,4,reference/master,priority-reference-tab,1
+Installation Services ,6,5,0,1,0,,0,0,0,0,,0,reference/master,priority-reference-tab,1
+"Brummond, Patty ",59,19,36,2,4,cost|model|url|vendor,93,10,32,5,description|modelNumber|price|url|vendor,24,likely_extractable,review-manually,2
+Klawitter ,58,14,43,2,4,cost|model|url|vendor,91,0,5,5,description|modelNumber|price|url|vendor,17,likely_extractable,review-manually,2
+"Kelly, Larry & Sue ",113,21,81,2,2,cost|vendor,266,0,14,3,description|price|vendor,13,likely_extractable,review-manually,2
+Add on Formula ,6,3,4,4,1,cost,4,0,4,1,price,5,other,review-manually,2
+Sheet1,1,1,0,,0,,0,0,0,0,,-1,other,review-manually,2
+"Schalk, Gerald 39867-THC ",50,26,32,2,4,cost|model|url|vendor,121,9,18,5,description|modelNumber|price|url|vendor,26,likely_extractable,project-history-tab,3
+"Sinacore, Jim & Pat 40133-THC2",49,15,38,2,5,cost|material|model|url|vendor,172,21,28,5,description|modelNumber|price|url|vendor,25,likely_extractable,project-history-tab,3
+Vicki Baulac 39762-LNC ,97,19,76,2,4,cost|model|url|vendor,273,34,70,5,description|modelNumber|price|url|vendor,24,likely_extractable,project-history-tab,3
+Ian Martin 39578-THC ,65,20,47,2,4,cost|model|url|vendor,129,8,30,5,description|modelNumber|price|url|vendor,24,likely_extractable,project-history-tab,3
+"Pechter, Barry 39943-THC ",46,19,28,2,4,cost|model|url|vendor,73,8,19,5,description|modelNumber|price|url|vendor,24,likely_extractable,project-history-tab,3
+"Kulinsky, Marcia 40084-THC ",63,18,39,2,4,cost|model|url|vendor,98,9,30,5,description|modelNumber|price|url|vendor,24,likely_extractable,project-history-tab,3
+"Jones-Torgerson, Gwen 40064-THC",56,19,36,2,4,cost|model|url|vendor,119,17,44,5,description|modelNumber|price|url|vendor,24,likely_extractable,project-history-tab,3
+Belinda & Brian Briese 39519-T ,64,21,43,2,4,cost|model|url|vendor,122,11,37,5,description|modelNumber|price|url|vendor,24,likely_extractable,project-history-tab,3
+Walters  Sue & Dan Bath ,49,19,29,2,4,cost|model|url|vendor,82,6,22,5,description|modelNumber|price|url|vendor,24,likely_extractable,project-history-tab,3
+"Angell, Linda & Darlene 39915",61,25,43,2,4,cost|model|url|vendor,224,23,54,5,description|modelNumber|price|url|vendor,24,likely_extractable,project-history-tab,3
+"Cain, Chris 39865-CJC",67,19,50,2,4,cost|model|url|vendor,159,21,55,5,description|modelNumber|price|url|vendor,24,likely_extractable,project-history-tab,3
+Lisa Evan Lindstrand 39785-THPT,30,14,22,2,4,cost|model|url|vendor,84,11,29,5,description|modelNumber|price|url|vendor,24,likely_extractable,project-history-tab,3
+Faraci Dave Hall Bath ,58,17,49,2,4,cost|model|url|vendor,186,12,30,5,description|modelNumber|price|url|vendor,23,likely_extractable,project-history-tab,3
+Robert & Amber Palm 39879-CJC ,54,18,43,2,4,cost|model|url|vendor,168,15,36,5,description|modelNumber|price|url|vendor,23,likely_extractable,project-history-tab,3
+Roloff 39337-THC Bath ,75,17,64,2,4,cost|model|url|vendor,306,33,45,5,description|modelNumber|price|url|vendor,23,likely_extractable,project-history-tab,3
+"Phalp, Kathy 39744-CJC ",33,14,25,2,4,cost|model|url|vendor,100,12,23,5,description|modelNumber|price|url|vendor,23,likely_extractable,project-history-tab,3
+Faraci Dave Master Bath ,74,18,64,2,3,model|url|vendor,246,19,44,4,description|modelNumber|url|vendor,22,likely_extractable,project-history-tab,3
+"Hardt, Corinne 40135-LNC ",47,19,26,2,4,cost|model|url|vendor,53,3,20,5,description|modelNumber|price|url|vendor,21,likely_extractable,project-history-tab,3
+"Sayre, Scott 39010-THC Bath ",71,26,27,2,4,cost|model|url|vendor,124,4,14,5,description|modelNumber|price|url|vendor,21,likely_extractable,project-history-tab,3
+Catherine Sinclair  40299-THC ,25,11,18,3,5,cost|material|model|url|vendor,42,0,6,6,category|description|modelNumber|price|url|vendor,20,likely_extractable,project-history-tab,3
+John Daye 39938-CJC ,86,12,64,5,5,cost|item|manufacturer|modelnumber|vendor,291,0,89,6,category|manufacturer|modelNumber|name|price|vendor,20,likely_extractable,project-history-tab,3
+Emerson Mary Ann 40000-,56,20,34,2,4,cost|model|url|vendor,79,1,19,5,description|modelNumber|price|url|vendor,19,likely_extractable,project-history-tab,3
+"Mrozek, Dan 40214-THC ",19,9,11,4,4,cost|item|modelnumber|vendor,33,0,10,6,category|description|modelNumber|name|price|vendor,17,likely_extractable,project-history-tab,3
+"Groharing, Lisa  39767-THC ",60,19,41,2,3,cost|model|vendor,91,1,28,4,description|modelNumber|price|vendor,17,likely_extractable,project-history-tab,3
+Gapinske Jane 40097-LNC  6.19.2,54,8,42,5,4,cost|item|model|vendor,124,0,49,6,category|description|modelNumber|name|price|vendor,16,likely_extractable,project-history-tab,3
+Linnea Thennes 39858-LNC,38,17,28,2,3,model|url|vendor,82,0,9,4,description|modelNumber|url|vendor,16,likely_extractable,project-history-tab,3
+Material DON'T USE ,8,6,4,4,2,item|model,16,0,0,3,description|modelNumber|name,15,likely_extractable,exclude-do-not-use,3
+"Vance, Stacey & Terry 39505-LNC",66,16,42,2,3,cost|model|vendor,131,0,23,4,description|modelNumber|price|vendor,15,likely_extractable,project-history-tab,3
+"Cannan, Matthew 39279-LNC ",145,17,124,2,3,cost|model|vendor,461,0,87,4,description|modelNumber|price|vendor,15,likely_extractable,project-history-tab,3
+"Jeffrey, Tracy 38729-THC ",72,23,47,2,3,cost|model|vendor,184,0,16,4,description|modelNumber|price|vendor,15,likely_extractable,project-history-tab,3
+"Danta, Andrew 39121-THC ",58,17,35,2,3,cost|model|vendor,82,0,14,4,description|modelNumber|price|vendor,15,likely_extractable,project-history-tab,3
+Garvin Tom & Laura 39007-THC  ,132,17,107,2,3,cost|model|vendor,311,0,104,4,description|modelNumber|price|vendor,15,likely_extractable,project-history-tab,3
+"Boiko,Dennis 38865-CJC Kitchen ",63,23,42,2,3,cost|model|vendor,156,0,15,4,description|modelNumber|price|vendor,15,likely_extractable,project-history-tab,3
+"Briese, Belinda 38875-THC  (2)",78,23,48,2,3,cost|model|vendor,172,0,43,4,description|modelNumber|price|vendor,15,likely_extractable,project-history-tab,3
+"Briese, Belinda 38875-THC ",74,23,43,2,3,cost|model|vendor,167,0,38,4,description|modelNumber|price|vendor,15,likely_extractable,project-history-tab,3
+Basement Material Template ,128,18,116,2,2,cost|vendor,466,0,8,3,description|price|vendor,15,template,exclude-template,3
+Marasovich 38699-LNC Bath  ,74,23,29,1,3,cost|material|vendor,128,0,11,3,description|price|vendor,14,likely_extractable,project-history-tab,3
+"Rhoda, Roberta 39376-CJC",65,21,26,2,2,cost|vendor,99,0,19,3,description|price|vendor,13,likely_extractable,project-history-tab,3
+"Garwood, Denise Bath ",62,21,21,2,2,cost|vendor,72,0,12,3,description|price|vendor,13,likely_extractable,project-history-tab,3
+"Conforti, Vince 38894-CJC ",60,21,20,2,2,cost|vendor,72,0,11,3,description|price|vendor,13,likely_extractable,project-history-tab,3
+"Schauer, Bill 39372-THC Bath  ",82,20,58,2,2,cost|vendor,240,0,21,3,description|price|vendor,13,likely_extractable,project-history-tab,3
+Marr Barb 38827-THC ,85,21,41,2,2,cost|vendor,151,0,20,3,description|price|vendor,13,likely_extractable,project-history-tab,3
+"Brummond, Patty 38867-CJC ",140,27,94,2,2,cost|vendor,455,0,19,3,description|price|vendor,13,likely_extractable,project-history-tab,3
+"Sommer, Janice 38816-THC shower",71,26,27,2,2,cost|vendor,114,0,13,3,description|price|vendor,13,likely_extractable,project-history-tab,3
+"Seroogy, Nancy 38718-THC",69,23,52,2,2,cost|vendor,173,0,20,3,description|price|vendor,13,likely_extractable,project-history-tab,3
+Brann 38849-CJC Laundry & Bath ,83,26,42,2,2,cost|vendor,211,0,18,3,description|price|vendor,13,likely_extractable,project-history-tab,3
+Houser 38753-THC Bath ,69,26,22,2,2,cost|vendor,97,0,8,3,description|price|vendor,13,likely_extractable,project-history-tab,3
+Dahlstrom 38873-THC ,67,26,23,2,2,cost|vendor,91,0,14,3,description|price|vendor,13,likely_extractable,project-history-tab,3
+VonRentzell - 38725-THC Bath ,67,26,22,2,2,cost|vendor,110,0,10,3,description|price|vendor,13,likely_extractable,project-history-tab,3
+Roloff 38562-LNC Basement ,142,18,132,2,2,cost|vendor,567,0,53,3,description|price|vendor,13,likely_extractable,project-history-tab,3
+Belcher 38660-LNC Bath ,87,26,43,2,2,cost|vendor,220,0,18,3,description|price|vendor,13,likely_extractable,project-history-tab,3
+DeSalvo 36590-LNX Kitchen ,71,23,48,2,2,cost|vendor,186,0,33,3,description|price|vendor,13,likely_extractable,project-history-tab,3
+Schemenauer 38376-LNX  Kitchen ,70,25,25,2,2,cost|vendor,138,0,14,3,description|price|vendor,13,likely_extractable,project-history-tab,3
+Smrz 38462-LNC Bath ,89,24,45,2,2,cost|vendor,242,0,11,3,description|price|vendor,13,likely_extractable,project-history-tab,3
+Bath Template ,91,24,41,2,2,cost|vendor,185,0,0,3,description|price|vendor,13,template,exclude-template,3
+Kitchen Template ,70,22,44,2,2,cost|vendor,166,0,2,3,description|price|vendor,13,template,exclude-template,3
+Siragusa 38860-THC Condo B&K,171,20,124,2,1,vendor,528,0,33,2,description|vendor,12,likely_extractable,project-history-tab,3
+"Dunne, Nancy 38896-THC",81,22,43,2,1,vendor,214,0,23,2,description|vendor,12,likely_extractable,project-history-tab,3
+Hyett HZR1 38537-LNC,114,15,68,2,1,vendor,227,0,16,2,description|vendor,12,likely_extractable,project-history-tab,3
+Carran 38348-LNX Bath ,91,21,45,2,1,vendor,247,0,7,2,description|vendor,12,likely_extractable,project-history-tab,3

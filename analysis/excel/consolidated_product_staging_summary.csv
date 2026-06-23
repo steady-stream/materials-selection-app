@@ -1,0 +1,12 @@
+metric,value
+baseline_input_rows,137
+derived_input_rows,2202
+output_unique_rows,504
+baseline_added,70
+derived_added,434
+merged_duplicates,1777
+dropped_no_key,58
+confidence_high,470
+confidence_medium,26
+confidence_low,8
+name_conflicts_logged,615

@@ -1,0 +1,8 @@
+metric,value
+input_rows,408
+product_identity_keys,166
+vendor_association_keys,155
+variation_keys,20
+unresolved_rows,239
+unresolved_missing_manufacturer,237
+unresolved_vendor_present_missing_or_invalid_price,2
