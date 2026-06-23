@@ -12,10 +12,11 @@ These tables use **hyphens** (`MaterialsSelection-TableName`) and are actively u
 4. **MaterialsSelection-Vendors**
 5. **MaterialsSelection-Manufacturers**
 6. **MaterialsSelection-Products**
-7. **MaterialsSelection-Orders**
-8. **MaterialsSelection-OrderItems**
-9. **MaterialsSelection-Receipts**
-10. **MaterialsSelection-ProductVendors**
+7. **MaterialsSelection-ProductVariations**
+8. **MaterialsSelection-Orders**
+9. **MaterialsSelection-OrderItems**
+10. **MaterialsSelection-Receipts**
+11. **MaterialsSelection-ProductVendors**
 
 ### ❌ OBSOLETE TABLES (Can Be Deleted - Underscore Format)
 
@@ -234,15 +235,22 @@ These tables use **underscores** (`MaterialsSelection_TableName`) and are **NOT 
 - `manufacturerId` (String) - Foreign key to Manufacturers
 - `name` (String) - Product name
 - `modelNumber` (String) - Model/SKU number
+- `modelStem` (String) - Normalized model identity stem used for duplicate detection
 - `description` (String) - Product description
 - `category` (String) - Product category
 - `unit` (String) - Default unit of measure
+- `tier` (String) - good | better | best (optional)
+- `collection` (String) - Product line/collection (optional)
+- `color` (String) - Optional default/base color
+- `finish` (String) - Optional default/base finish
 - `imageUrl` (String) - Product image URL
+- `productUrl` (String) - Product page URL (optional)
 
 **Relationships:**
 
 - Belongs to one manufacturer
 - Has many product-vendor relationships (different vendors may carry same product)
+- Has many product variations
 - Referenced by line items
 
 **Indexes:**
@@ -257,16 +265,69 @@ These tables use **underscores** (`MaterialsSelection_TableName`) and are **NOT 
   "manufacturerId": "mfr-kohler",
   "name": "Undermount Sink",
   "modelNumber": "K-2209-0",
+  "modelStem": "K22090",
   "description": "Undermount Bathroom Sink - White",
   "category": "Plumbing",
   "unit": "ea",
-  "imageUrl": ""
+  "tier": "better",
+  "collection": "Caxton",
+  "color": "White",
+  "finish": null,
+  "imageUrl": "",
+  "productUrl": "https://www.kohler.com/..."
 }
 ```
 
 ---
 
-### 7. MaterialsSelection-ProductVendors
+### 7. MaterialsSelection-ProductVariations
+
+**Purpose:** Product variation records tied to a base product (color/finish/effective model)
+
+**Key Attributes:**
+
+- `id` (String) - Primary Key, UUID
+- `productId` (String) - Foreign key to Products
+- `modelNumber` (String) - Optional explicit variation model number
+- `effectiveModelNumber` (String) - Effective model used by selection workflows
+- `color` (String) - Optional variation color
+- `finish` (String) - Optional variation finish
+- `imageUrl` (String) - Optional variation-specific image
+- `sortOrder` (Number) - Presentation ordering
+- `isDefault` (Boolean) - Default variation for product
+- `createdAt` (String) - ISO timestamp
+- `updatedAt` (String) - ISO timestamp
+
+**Relationships:**
+
+- Belongs to one product
+- May be referenced by line items and line item options
+
+**Indexes:**
+
+- ProductIdIndex (GSI) - Query variations for a product
+
+**Example:**
+
+```json
+{
+  "id": "var-123",
+  "productId": "prod-123",
+  "modelNumber": "K-2209-0",
+  "effectiveModelNumber": "K-2209-0",
+  "color": "White",
+  "finish": null,
+  "imageUrl": "",
+  "sortOrder": 1,
+  "isDefault": true,
+  "createdAt": "2026-06-01T10:00:00Z",
+  "updatedAt": "2026-06-01T10:00:00Z"
+}
+```
+
+---
+
+### 8. MaterialsSelection-ProductVendors
 
 **Purpose:** Junction table linking products to vendors with pricing (many-to-many relationship)
 
@@ -313,7 +374,7 @@ These tables use **underscores** (`MaterialsSelection_TableName`) and are **NOT 
 
 ---
 
-### 8. MaterialsSelection-Orders
+### 9. MaterialsSelection-Orders
 
 **Purpose:** Purchase orders placed with vendors
 
@@ -350,7 +411,7 @@ These tables use **underscores** (`MaterialsSelection_TableName`) and are **NOT 
 
 ---
 
-### 9. MaterialsSelection-OrderItems
+### 10. MaterialsSelection-OrderItems
 
 **Purpose:** Individual items within an order (links orders to line items)
 
@@ -395,7 +456,7 @@ These tables use **underscores** (`MaterialsSelection_TableName`) and are **NOT 
 
 ---
 
-### 10. MaterialsSelection-Receipts
+### 11. MaterialsSelection-Receipts
 
 **Purpose:** Receiving records when ordered items arrive
 
@@ -454,9 +515,13 @@ Projects (1) ──── (M) Categories (1) ──── (M) LineItems (M) ─�
                                               │
                                           Products (M) ──── (M) ProductVendors (M) ──── (1) Vendors
                                               │
-                                          (M) │ (1)
+                      (M) │ (1)
                                               │
                                         Manufacturers
+                        │
+                      (1) │ (M)
+                        │
+                    ProductVariations
 ```
 
 ### Key Relationships Explained
@@ -471,6 +536,12 @@ Projects (1) ──── (M) Categories (1) ──── (M) LineItems (M) ─�
 - Line item optionally references a product from the catalog
 - Product can be sold by multiple vendors at different prices
 - ProductVendors junction table holds vendor-specific pricing
+
+**Product → ProductVariation**
+
+- Products can define color/finish/model variants
+- Variation identity is managed per product
+- Project selection and options can reference specific variation IDs
 
 **LineItem → OrderItem → Order → Vendor**
 
@@ -544,15 +615,20 @@ Projects (1) ──── (M) Categories (1) ──── (M) LineItems (M) ─�
    - Use: ProductIdIndex GSI on ProductVendors
    - Query: `productId = ?`
 
-5. **Get all orders for a vendor**
+5. **Get all variations for a product**
+
+- Use: ProductIdIndex GSI on ProductVariations
+- Query: `productId = ?`
+
+6. **Get all orders for a vendor**
    - Use: VendorIdIndex GSI
    - Query: `vendorId = ?`
 
-6. **Get all order items in an order**
+7. **Get all order items in an order**
    - Use: OrderIdIndex GSI
    - Query: `orderId = ?`
 
-7. **Get all receipts for an order item**
+8. **Get all receipts for an order item**
    - Use: OrderItemIdIndex GSI
    - Query: `orderItemId = ?`
 
@@ -560,18 +636,19 @@ Projects (1) ──── (M) Categories (1) ──── (M) LineItems (M) ─�
 
 ## Global Secondary Indexes (GSI) Summary
 
-| Table          | GSI Name            | Partition Key  | Sort Key | Purpose                        |
-| -------------- | ------------------- | -------------- | -------- | ------------------------------ |
-| Categories     | ProjectIdIndex      | projectId      | -        | Query categories by project    |
-| LineItems      | CategoryIdIndex     | categoryId     | -        | Query items by category        |
-| LineItems      | ProjectIdIndex      | projectId      | -        | Query items by project         |
-| Products       | ManufacturerIdIndex | manufacturerId | -        | Query products by manufacturer |
-| ProductVendors | ProductIdIndex      | productId      | -        | Query vendors for a product    |
-| ProductVendors | VendorIdIndex       | vendorId       | -        | Query products from a vendor   |
-| Orders         | VendorIdIndex       | vendorId       | -        | Query orders by vendor         |
-| OrderItems     | OrderIdIndex        | orderId        | -        | Query items in an order        |
-| OrderItems     | LineItemIdIndex     | lineItemId     | -        | Query orders for a line item   |
-| Receipts       | OrderItemIdIndex    | orderItemId    | -        | Query receipts by order item   |
+| Table             | GSI Name            | Partition Key  | Sort Key | Purpose                        |
+| ----------------- | ------------------- | -------------- | -------- | ------------------------------ |
+| Categories        | ProjectIdIndex      | projectId      | -        | Query categories by project    |
+| LineItems         | CategoryIdIndex     | categoryId     | -        | Query items by category        |
+| LineItems         | ProjectIdIndex      | projectId      | -        | Query items by project         |
+| Products          | ManufacturerIdIndex | manufacturerId | -        | Query products by manufacturer |
+| ProductVariations | ProductIdIndex      | productId      | -        | Query variations for product   |
+| ProductVendors    | ProductIdIndex      | productId      | -        | Query vendors for a product    |
+| ProductVendors    | VendorIdIndex       | vendorId       | -        | Query products from a vendor   |
+| Orders            | VendorIdIndex       | vendorId       | -        | Query orders by vendor         |
+| OrderItems        | OrderIdIndex        | orderId        | -        | Query items in an order        |
+| OrderItems        | LineItemIdIndex     | lineItemId     | -        | Query orders for a line item   |
+| Receipts          | OrderItemIdIndex    | orderItemId    | -        | Query receipts by order item   |
 
 ---
 
@@ -597,9 +674,9 @@ aws dynamodb delete-table --table-name MaterialsSelection_Products --region us-e
 
 ## Current Schema Version
 
-**Version:** 1.0
-**Last Updated:** February 5, 2026
-**Active Tables:** 10 (hyphen format)
+**Version:** 1.1
+**Last Updated:** June 23, 2026
+**Active Tables:** 11 (hyphen format)
 **Obsolete Tables:** 6 (underscore format)
 
 ---

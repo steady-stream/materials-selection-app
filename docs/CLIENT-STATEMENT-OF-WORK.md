@@ -167,18 +167,18 @@ The application integrates with the MegaPros SharePoint environment (apiaconsult
 
 ## Technical Summary
 
-| Component      | Technology                                                                  |
-| -------------- | --------------------------------------------------------------------------- |
-| Frontend       | React 18, TypeScript, Vite, Tailwind CSS                                    |
-| Backend        | AWS Lambda (Node.js 22), API Gateway                                        |
-| Database       | AWS DynamoDB (10 tables)                                                    |
-| Hosting        | AWS S3 + CloudFront                                                         |
-| Authentication | AWS Cognito                                                                 |
-| AI             | Amazon Bedrock (Nova Micro), Bedrock Knowledge Bases, OpenSearch Serverless |
-| Documents      | Microsoft SharePoint / Microsoft Graph API                                  |
-| CRM            | Salesforce (REST API)                                                       |
-| Presentations  | pptxgenjs (client-side PowerPoint generation)                               |
-| Source Control | GitHub                                                                      |
+| Component      | Technology                                                                                          |
+| -------------- | --------------------------------------------------------------------------------------------------- |
+| Frontend       | React 18, TypeScript, Vite, Tailwind CSS                                                            |
+| Backend        | AWS Lambda (Node.js 22), API Gateway                                                                |
+| Database       | AWS DynamoDB (10 tables in 2026-03-10 snapshot; 11 in current runtime, including ProductVariations) |
+| Hosting        | AWS S3 + CloudFront                                                                                 |
+| Authentication | AWS Cognito                                                                                         |
+| AI             | Amazon Bedrock (Nova Micro), Bedrock Knowledge Bases, OpenSearch Serverless                         |
+| Documents      | Microsoft SharePoint / Microsoft Graph API                                                          |
+| CRM            | Salesforce (REST API)                                                                               |
+| Presentations  | pptxgenjs (client-side PowerPoint generation)                                                       |
+| Source Control | GitHub                                                                                              |
 
 ### Test Environment
 
