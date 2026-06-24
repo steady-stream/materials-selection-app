@@ -35,6 +35,8 @@ import { ChatAssistant } from "./ChatAssistant";
 import { ChooseOptionsModal } from "./ChooseOptionsModal";
 import DocumentManager from "./DocumentManager";
 
+type ProductCatalogStatus = "idle" | "loading" | "ready" | "error";
+
 const ProjectDetail = () => {
   const { id } = useParams<{ id: string }>();
   const [project, setProject] = useState<Project | null>(null);
@@ -57,6 +59,12 @@ const ProjectDetail = () => {
    */
   const [products, setProducts] = useState<Product[]>([]);
   const [allProducts, setAllProducts] = useState<Product[]>([]); // Full unfiltered list
+  const [productCatalogStatus, setProductCatalogStatus] =
+    useState<ProductCatalogStatus>("idle");
+  const [productCatalogError, setProductCatalogError] = useState<string | null>(
+    null,
+  );
+  const productCatalogLoadPromiseRef = useRef<Promise<Product[]> | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [showAddRow, setShowAddRow] = useState<string | null>(null); // categoryId
@@ -276,6 +284,37 @@ const ProjectDetail = () => {
     }
   }, [id]);
 
+  const ensureProductCatalogLoaded = async (): Promise<void> => {
+    if (productCatalogStatus === "ready") {
+      return;
+    }
+
+    if (productCatalogLoadPromiseRef.current) {
+      await productCatalogLoadPromiseRef.current;
+      return;
+    }
+
+    setProductCatalogStatus("loading");
+    setProductCatalogError(null);
+
+    const loadPromise = productService.getAllProducts();
+    productCatalogLoadPromiseRef.current = loadPromise;
+
+    try {
+      const productsData = await loadPromise;
+      setAllProducts(productsData);
+      setProducts((current) => (current.length > 0 ? current : productsData));
+      setProductCatalogStatus("ready");
+    } catch (error) {
+      console.error("Failed to load product catalog for project page:", error);
+      setProductCatalogStatus("error");
+      setProductCatalogError("Failed to load products. Please try again.");
+      throw error;
+    } finally {
+      productCatalogLoadPromiseRef.current = null;
+    }
+  };
+
   const loadProjectLineItemOptions = async (
     projectId: string,
     projectLineItems: LineItem[],
@@ -326,7 +365,6 @@ const ProjectDetail = () => {
         lineItemsData,
         vendorsData,
         manufacturersData,
-        productsData,
         productVendorsData,
       ] = await Promise.all([
         projectService.getById(projectId),
@@ -334,7 +372,6 @@ const ProjectDetail = () => {
         lineItemService.getByProjectId(projectId),
         vendorService.getAllVendors(),
         manufacturerService.getAllManufacturers(),
-        productService.getAllProducts(),
         productVendorService.getAll(),
       ]);
 
@@ -366,8 +403,6 @@ const ProjectDetail = () => {
       setLineItems(lineItemsData);
       setVendors(vendorsData);
       setManufacturers(manufacturersData);
-      setProducts(productsData);
-      setAllProducts(productsData); // Store full unfiltered list
       setOrders(ordersData);
       setOrderItems(orderItemsData);
       setReceipts(receiptsData);
@@ -381,6 +416,13 @@ const ProjectDetail = () => {
         "unassigned",
       ]);
       setExpandedSections(allIds);
+
+      // Load full product catalog asynchronously so project details render first.
+      if (productCatalogStatus !== "ready") {
+        void ensureProductCatalogLoaded().catch(() => {
+          // Keep project page usable even if catalog hydration fails.
+        });
+      }
     } catch (err) {
       console.error("Error loading project:", err);
       console.error("Project ID:", projectId);
@@ -736,6 +778,15 @@ const ProjectDetail = () => {
 
   const handleEditItemVendorChange = async (vendorId: string) => {
     if (!editingItem) return;
+
+    if (productCatalogStatus !== "ready") {
+      try {
+        await ensureProductCatalogLoaded();
+      } catch {
+        return;
+      }
+    }
+
     const vendor = vendorId || undefined;
     setEditingItem({ ...editingItem, vendorId: vendor });
 
@@ -749,10 +800,7 @@ const ProjectDetail = () => {
         .filter((pv: ProductVendor) => pv.vendorId === vendorId)
         .map((pv: ProductVendor) => pv.productId);
 
-      const allProductsList = await productService.getAllProducts();
-      let filtered = allProductsList.filter((p) =>
-        vendorProductIds.includes(p.id),
-      );
+      let filtered = allProducts.filter((p) => vendorProductIds.includes(p.id));
 
       if (editingItem.manufacturerId) {
         filtered = filtered.filter(
@@ -768,14 +816,22 @@ const ProjectDetail = () => {
         );
         setProducts(filtered);
       } else {
-        const all = await productService.getAllProducts();
-        setProducts(all);
+        setProducts(allProducts);
       }
     }
   };
 
   const handleEditItemManufacturerChange = async (manufacturerId: string) => {
     if (!editingItem) return;
+
+    if (productCatalogStatus !== "ready") {
+      try {
+        await ensureProductCatalogLoaded();
+      } catch {
+        return;
+      }
+    }
+
     const previousManufacturerId = editingItem.manufacturerId;
     const vendorAlreadySelected =
       editingItem.vendorId && !previousManufacturerId;
@@ -815,8 +871,7 @@ const ProjectDetail = () => {
           await productService.getProductsByManufacturer(manufacturerId);
         setProducts(allFiltered);
       } else {
-        const all = await productService.getAllProducts();
-        setProducts(all);
+        setProducts(allProducts);
       }
     }
   };
@@ -1012,6 +1067,14 @@ const ProjectDetail = () => {
   };
 
   const handleNewItemVendorChange = async (vendorId: string) => {
+    if (productCatalogStatus !== "ready") {
+      try {
+        await ensureProductCatalogLoaded();
+      } catch {
+        return;
+      }
+    }
+
     const vendor = vendorId || undefined;
     setNewItem({ ...newItem, vendorId: vendor });
 
@@ -1028,10 +1091,7 @@ const ProjectDetail = () => {
         .filter((pv: ProductVendor) => pv.vendorId === vendorId)
         .map((pv: ProductVendor) => pv.productId);
 
-      const allProductsList = await productService.getAllProducts();
-      let filtered = allProductsList.filter((p) =>
-        vendorProductIds.includes(p.id),
-      );
+      let filtered = allProducts.filter((p) => vendorProductIds.includes(p.id));
 
       // If manufacturer is also selected, filter further
       if (newItem.manufacturerId) {
@@ -1049,8 +1109,7 @@ const ProjectDetail = () => {
         );
         setProducts(filtered);
       } else {
-        const all = await productService.getAllProducts();
-        setProducts(all);
+        setProducts(allProducts);
       }
     }
   };
@@ -1072,6 +1131,14 @@ const ProjectDetail = () => {
    * - When manufacturer changed, clears product/vendor/material/unit/cost/name/modelNumber
    */
   const handleManufacturerChange = async (manufacturerId: string) => {
+    if (productCatalogStatus !== "ready") {
+      try {
+        await ensureProductCatalogLoaded();
+      } catch {
+        return;
+      }
+    }
+
     const previousManufacturerId = newItem.manufacturerId;
     const vendorAlreadySelected = newItem.vendorId && !previousManufacturerId;
 
@@ -1116,8 +1183,7 @@ const ProjectDetail = () => {
         setProducts(allFiltered);
       } else {
         // No manufacturer - show all products
-        const all = await productService.getAllProducts();
-        setProducts(all);
+        setProducts(allProducts);
       }
     }
   };
@@ -1203,13 +1269,21 @@ const ProjectDetail = () => {
     }
   };
 
-  const handleOpenSelectProduct = (item: LineItem) => {
+  const handleOpenSelectProduct = async (item: LineItem) => {
     setSelectingForLineItem(item);
     setSelectedCategoryForInsert(item.categoryId);
     setInsertQuantity(item.quantity);
     setInsertUnitCost(0);
     setInsertVariationByProduct({});
     setShowInsertProductModal(true);
+
+    if (productCatalogStatus !== "ready") {
+      try {
+        await ensureProductCatalogLoaded();
+      } catch {
+        // Keep modal open so user can retry from within the product table.
+      }
+    }
   };
 
   const resolveInsertVariation = (
@@ -2472,7 +2546,7 @@ const ProjectDetail = () => {
                 ➕ Section
               </button>
               <button
-                onClick={() => {
+                onClick={async () => {
                   setShowInsertProductModal(true);
                   setFilterVendorId("");
                   setFilterManufacturerId("");
@@ -2486,6 +2560,14 @@ const ProjectDetail = () => {
                   setInsertQuantity(1);
                   setInsertUnitCost(0);
                   setInsertVendorId("");
+
+                  if (productCatalogStatus !== "ready") {
+                    try {
+                      await ensureProductCatalogLoaded();
+                    } catch {
+                      // Keep modal open so user can retry from within the product table.
+                    }
+                  }
                 }}
                 className="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700"
               >
@@ -6024,6 +6106,53 @@ const ProjectDetail = () => {
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {(() => {
+                      if (
+                        productCatalogStatus === "loading" &&
+                        allProducts.length === 0 &&
+                        products.length === 0
+                      ) {
+                        return (
+                          <tr>
+                            <td
+                              colSpan={8}
+                              className="px-3 py-8 text-center text-xs text-gray-500"
+                            >
+                              Loading products...
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      if (
+                        productCatalogStatus === "error" &&
+                        allProducts.length === 0 &&
+                        products.length === 0
+                      ) {
+                        return (
+                          <tr>
+                            <td
+                              colSpan={8}
+                              className="px-3 py-8 text-center text-xs text-red-600"
+                            >
+                              <div className="space-y-2">
+                                <div>
+                                  {productCatalogError ||
+                                    "Failed to load products."}
+                                </div>
+                                <button
+                                  onClick={() => {
+                                    void ensureProductCatalogLoaded();
+                                  }}
+                                  className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
+                                >
+                                  Retry
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      }
+
                       // Filter products based on all criteria
                       let filtered = products;
 
