@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
     categoryService,
@@ -276,6 +276,47 @@ const ProjectDetail = () => {
     }
   }, [id]);
 
+  const loadProjectLineItemOptions = async (
+    projectId: string,
+    projectLineItems: LineItem[],
+  ): Promise<LineItemOption[]> => {
+    try {
+      return await lineItemOptionService.getByProjectId(projectId);
+    } catch (error) {
+      console.warn(
+        "Project-level line item options endpoint unavailable, falling back to per-line-item requests.",
+        error,
+      );
+
+      const perLineItem = await Promise.all(
+        projectLineItems.map((lineItem) =>
+          lineItemOptionService.getByLineItemId(lineItem.id),
+        ),
+      );
+      return perLineItem.flat();
+    }
+  };
+
+  const loadProjectReceipts = async (
+    projectId: string,
+    projectOrders: Order[],
+  ): Promise<Receipt[]> => {
+    try {
+      return await orderService.getReceiptsByProject(projectId);
+    } catch (error) {
+      console.warn(
+        "Project-level receipts endpoint unavailable, falling back to per-order requests.",
+        error,
+      );
+
+      if (projectOrders.length === 0) return [];
+      const perOrder = await Promise.all(
+        projectOrders.map((order) => orderService.getReceipts(order.id)),
+      );
+      return perOrder.flat();
+    }
+  };
+
   const loadAllData = async (projectId: string) => {
     try {
       setLoading(true);
@@ -286,8 +327,7 @@ const ProjectDetail = () => {
         vendorsData,
         manufacturersData,
         productsData,
-        ordersData,
-        orderItemsData,
+        productVendorsData,
       ] = await Promise.all([
         projectService.getById(projectId),
         categoryService.getByProjectId(projectId),
@@ -295,27 +335,32 @@ const ProjectDetail = () => {
         vendorService.getAllVendors(),
         manufacturerService.getAllManufacturers(),
         productService.getAllProducts(),
-        orderService.getByProjectId(projectId),
-        orderService.getOrderItemsByProject(projectId),
+        productVendorService.getAll(),
       ]);
 
-      // Load all product vendors
-      const allProductVendors: ProductVendor[] = [];
-      for (const product of productsData) {
-        const pvs = await productVendorService.getAllByProduct(product.id);
-        allProductVendors.push(...pvs);
-      }
-      setProductVendors(allProductVendors);
+      // Orders routes may not exist in all environments — load defensively so
+      // a missing route never prevents the project page from rendering.
+      const [ordersData, orderItemsData] = await Promise.all([
+        orderService.getByProjectId(projectId).catch((err) => {
+          console.warn("Orders unavailable for this environment:", err.message);
+          return [] as Order[];
+        }),
+        orderService.getOrderItemsByProject(projectId).catch((err) => {
+          console.warn(
+            "OrderItems unavailable for this environment:",
+            err.message,
+          );
+          return [] as OrderItem[];
+        }),
+      ]);
 
-      // Load all line item options
-      const allOptions: LineItemOption[] = [];
-      for (const lineItem of lineItemsData) {
-        const options = await lineItemOptionService.getByLineItemId(
-          lineItem.id,
-        );
-        allOptions.push(...options);
-      }
-      setAllLineItemOptions(allOptions);
+      const [lineItemOptionsData, receiptsData] = await Promise.all([
+        loadProjectLineItemOptions(projectId, lineItemsData),
+        loadProjectReceipts(projectId, ordersData),
+      ]);
+
+      setProductVendors(productVendorsData);
+      setAllLineItemOptions(lineItemOptionsData);
       setProject(projectData);
       setCategories(categoriesData);
       setLineItems(lineItemsData);
@@ -325,12 +370,7 @@ const ProjectDetail = () => {
       setAllProducts(productsData); // Store full unfiltered list
       setOrders(ordersData);
       setOrderItems(orderItemsData);
-
-      // Load receipts for all orders
-      const allReceipts = await Promise.all(
-        ordersData.map((order) => orderService.getReceipts(order.id)),
-      );
-      setReceipts(allReceipts.flat());
+      setReceipts(receiptsData);
 
       // Auto-expand all sections
       const allIds = new Set<string>([
@@ -1554,36 +1594,6 @@ const ProjectDetail = () => {
     }
   };
 
-  // Check if a line item has unselected options
-  const hasUnselectedOptions = (lineItemId: string): boolean => {
-    const options = allLineItemOptions.filter(
-      (opt) => opt.lineItemId === lineItemId,
-    );
-    return options.some((opt) => !opt.isSelected);
-  };
-
-  const handleOptionsChanged = async () => {
-    // Reload line items to reflect any product selection changes
-    if (id) {
-      try {
-        const updatedLineItems = await lineItemService.getByProjectId(id);
-        setLineItems(updatedLineItems);
-
-        // Reload all line item options
-        const allOptions: LineItemOption[] = [];
-        for (const lineItem of updatedLineItems) {
-          const options = await lineItemOptionService.getByLineItemId(
-            lineItem.id,
-          );
-          allOptions.push(...options);
-        }
-        setAllLineItemOptions(allOptions);
-      } catch (error) {
-        console.error("Error reloading line items:", error);
-      }
-    }
-  };
-
   const sortLineItemsForDisplay = (items: LineItem[]) => {
     return [...items].sort((a, b) => {
       const aSeq =
@@ -1598,6 +1608,115 @@ const ProjectDetail = () => {
 
       return a.id.localeCompare(b.id);
     });
+  };
+
+  // ─── Memoized lookup maps ─────────────────────────────────────────────────
+  // Each map is recomputed only when its direct dependency array changes,
+  // preventing repeated O(n) scans on every render/interaction.
+
+  // Map<lineItemId, LineItemOption[]> — drives hasUnselectedOptions
+  const optionsByLineItemId = useMemo(() => {
+    const map = new Map<string, LineItemOption[]>();
+    for (const opt of allLineItemOptions) {
+      const bucket = map.get(opt.lineItemId) ?? [];
+      bucket.push(opt);
+      map.set(opt.lineItemId, bucket);
+    }
+    return map;
+  }, [allLineItemOptions]);
+
+  // Map<categoryId, LineItem[]> sorted by sequence — drives category row rendering
+  const lineItemsByCategoryId = useMemo(() => {
+    const map = new Map<string, LineItem[]>();
+    for (const item of lineItems) {
+      const bucket = map.get(item.categoryId) ?? [];
+      bucket.push(item);
+      map.set(item.categoryId, bucket);
+    }
+    // Sort each bucket once
+    for (const [key, bucket] of map) {
+      map.set(key, sortLineItemsForDisplay(bucket));
+    }
+    return map;
+  }, [lineItems]);
+
+  // Map<categoryId, { total, actualTotal }> — drives section header summaries
+  const categoryTotals = useMemo(() => {
+    const map = new Map<string, { total: number; actualTotal: number }>();
+    // Build a lineItemId→orderedTotal lookup once
+    const orderItemTotalById = new Map<string, number>();
+    for (const oi of orderItems) {
+      const prev = orderItemTotalById.get(oi.lineItemId) ?? 0;
+      orderItemTotalById.set(
+        oi.lineItemId,
+        prev + oi.orderedQuantity * oi.orderedPrice,
+      );
+    }
+    for (const [catId, items] of lineItemsByCategoryId) {
+      const total = items.reduce((s, item) => s + item.totalCost, 0);
+      const actualTotal = items.reduce(
+        (s, item) => s + (orderItemTotalById.get(item.id) ?? 0),
+        0,
+      );
+      map.set(catId, { total, actualTotal });
+    }
+    return map;
+  }, [lineItemsByCategoryId, orderItems]);
+
+  // Map<lineItemId, Order[]> — drives order-detail rows per line item
+  const lineItemOrdersMap = useMemo(() => {
+    // Map orderId → Order for O(1) lookup
+    const ordersById = new Map(orders.map((o) => [o.id, o]));
+    const map = new Map<string, Order[]>();
+    for (const oi of orderItems) {
+      const order = ordersById.get(oi.orderId);
+      if (!order) continue;
+      const bucket = map.get(oi.lineItemId) ?? [];
+      if (!bucket.some((o) => o.id === order.id)) bucket.push(order);
+      map.set(oi.lineItemId, bucket);
+    }
+    return map;
+  }, [orders, orderItems]);
+
+  // Map<orderItemId, Receipt[]> — drives receipt rows inside expanded orders
+  const receiptsByOrderItemId = useMemo(() => {
+    const map = new Map<string, Receipt[]>();
+    for (const r of receipts) {
+      const bucket = map.get(r.orderItemId) ?? [];
+      bucket.push(r);
+      map.set(r.orderItemId, bucket);
+    }
+    return map;
+  }, [receipts]);
+
+  // Set<vendorId> of vendors that have at least one line item — drives vendor view
+  const activeVendorIds = useMemo(
+    () => new Set(lineItems.map((item) => item.vendorId).filter(Boolean)),
+    [lineItems],
+  );
+
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  const hasUnselectedOptions = (lineItemId: string): boolean => {
+    const options = optionsByLineItemId.get(lineItemId) ?? [];
+    return options.some((opt) => !opt.isSelected);
+  };
+
+  const handleOptionsChanged = async () => {
+    // Reload line items to reflect any product selection changes
+    if (id) {
+      try {
+        const updatedLineItems = await lineItemService.getByProjectId(id);
+        const updatedOptions = await loadProjectLineItemOptions(
+          id,
+          updatedLineItems,
+        );
+        setLineItems(updatedLineItems);
+        setAllLineItemOptions(updatedOptions);
+      } catch (error) {
+        console.error("Error reloading line items:", error);
+      }
+    }
   };
 
   const buildResequencedLineItems = (
@@ -1753,49 +1872,26 @@ const ProjectDetail = () => {
     }
   };
 
-  const getCategoryLineItems = (categoryId: string) => {
-    return sortLineItemsForDisplay(
-      lineItems.filter((item) => item.categoryId === categoryId),
-    );
-  };
+  const getCategoryLineItems = (categoryId: string) =>
+    lineItemsByCategoryId.get(categoryId) ?? [];
 
-  const getCategoryTotal = (categoryId: string) => {
-    return getCategoryLineItems(categoryId).reduce(
-      (sum, item) => sum + item.totalCost,
-      0,
-    );
-  };
+  const getCategoryTotal = (categoryId: string) =>
+    categoryTotals.get(categoryId)?.total ?? 0;
 
-  const getCategoryActualTotal = (categoryId: string) => {
-    const categoryLineItemIds = getCategoryLineItems(categoryId).map(
-      (item) => item.id,
-    );
-    return orderItems
-      .filter((oi) => categoryLineItemIds.includes(oi.lineItemId))
-      .reduce((sum, oi) => sum + oi.orderedQuantity * oi.orderedPrice, 0);
-  };
+  const getCategoryActualTotal = (categoryId: string) =>
+    categoryTotals.get(categoryId)?.actualTotal ?? 0;
 
-  const getVendorLineItems = (vendorId: string) => {
-    return lineItems.filter((item) => item.vendorId === vendorId);
-  };
+  const getVendorLineItems = (vendorId: string) =>
+    lineItems.filter((item) => item.vendorId === vendorId);
 
-  const getUnassignedLineItems = () => {
-    return lineItems.filter((item) => !item.vendorId);
-  };
+  const getUnassignedLineItems = () =>
+    lineItems.filter((item) => !item.vendorId);
 
-  const getVendorTotal = (vendorId: string) => {
-    return getVendorLineItems(vendorId).reduce(
-      (sum, item) => sum + item.totalCost,
-      0,
-    );
-  };
+  const getVendorTotal = (vendorId: string) =>
+    getVendorLineItems(vendorId).reduce((sum, item) => sum + item.totalCost, 0);
 
-  const getActiveVendors = () => {
-    const vendorIds = new Set(
-      lineItems.filter((item) => item.vendorId).map((item) => item.vendorId),
-    );
-    return vendors.filter((v) => vendorIds.has(v.id));
-  };
+  const getActiveVendors = () =>
+    vendors.filter((v) => activeVendorIds.has(v.id));
 
   const applyVendorTaxRate = (baseCost: number, vendorId?: string) => {
     if (!vendorId) return baseCost;
@@ -2245,14 +2341,11 @@ const ProjectDetail = () => {
     return orders.filter((order) => order.vendorId === vendorId);
   };
 
-  const getLineItemOrders = (lineItemId: string) => {
-    const itemOrders = orderItems.filter((oi) => oi.lineItemId === lineItemId);
-    return orders.filter((o) => itemOrders.some((oi) => oi.orderId === o.id));
-  };
+  const getLineItemOrders = (lineItemId: string) =>
+    lineItemOrdersMap.get(lineItemId) ?? [];
 
-  const getOrderItemReceipts = (orderItemId: string) => {
-    return receipts.filter((r) => r.orderItemId === orderItemId);
-  };
+  const getOrderItemReceipts = (orderItemId: string) =>
+    receiptsByOrderItemId.get(orderItemId) ?? [];
 
   if (loading) return <div className="text-center py-8">Loading...</div>;
   if (!project)

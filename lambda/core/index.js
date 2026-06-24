@@ -81,6 +81,12 @@ exports.handler = async (event) => {
     if (path.match(/^\/projects\/[^/]+\/lineitems$/) && method === "GET") {
       return await getLineItemsByProject(path.split("/")[2]);
     }
+    if (
+      path.match(/^\/projects\/[^/]+\/lineitem-options$/) &&
+      method === "GET"
+    ) {
+      return await getLineItemOptionsByProject(path.split("/")[2]);
+    }
     if (path.match(/^\/lineitems\/[^/]+$/) && method === "GET") {
       return await getLineItem(path.split("/")[2]);
     }
@@ -298,6 +304,35 @@ async function getLineItemsByProject(projectId) {
     headers,
     body: JSON.stringify(sortLineItems(result.Items || [])),
   };
+}
+
+async function getLineItemOptionsByProject(projectId) {
+  const lineItemsResult = await ddb.send(
+    new QueryCommand({
+      TableName: LINEITEMS_TABLE,
+      IndexName: "ProjectIdIndex",
+      KeyConditionExpression: "projectId = :projectId",
+      ExpressionAttributeValues: { ":projectId": projectId },
+      ProjectionExpression: "id",
+    }),
+  );
+
+  const lineItemIds = new Set(
+    (lineItemsResult.Items || []).map((item) => item.id),
+  );
+  if (lineItemIds.size === 0) {
+    return { statusCode: 200, headers, body: JSON.stringify([]) };
+  }
+
+  // LineItemOptions currently lacks a projectId GSI, so we scan once and filter in-memory.
+  const optionsResult = await ddb.send(
+    new ScanCommand({ TableName: LINEITEMOPTIONS_TABLE }),
+  );
+  const filtered = (optionsResult.Items || []).filter((option) =>
+    lineItemIds.has(option.lineItemId),
+  );
+
+  return { statusCode: 200, headers, body: JSON.stringify(filtered) };
 }
 
 async function getLineItem(id) {

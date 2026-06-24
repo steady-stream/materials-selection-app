@@ -156,7 +156,7 @@ $routes = @(
     @{ id = "n1du2m"; methods = @("GET", "POST"); fn = "MaterialsSelection-Catalog-API" }  # /products
     @{ id = "3vuems"; methods = @("DELETE", "GET", "PUT"); fn = "MaterialsSelection-Catalog-API" }  # /products/{productId}
     @{ id = "s6o9eb"; methods = @("GET"); fn = "MaterialsSelection-Catalog-API" }  # /products/{productId}/vendors
-    @{ id = "ysiueg"; methods = @("POST"); fn = "MaterialsSelection-Catalog-API" }  # /product-vendors
+    @{ id = "ysiueg"; methods = @("GET", "POST"); fn = "MaterialsSelection-Catalog-API" }  # /product-vendors
     @{ id = "ls1yn0"; methods = @("DELETE", "GET", "PUT"); fn = "MaterialsSelection-Catalog-API" }  # /product-vendors/{id}
     # ── Core-API ───────────────────────────────────────────────────────────────
     @{ id = "cg43y3"; methods = @("GET", "POST"); fn = "MaterialsSelection-Core-API" }     # /categories
@@ -172,6 +172,17 @@ $routes = @(
     # ── Projects-API ───────────────────────────────────────────────────────────
     @{ id = "8o1qho"; methods = @("GET", "POST"); fn = "MaterialsSelection-Projects-API" } # /projects
     @{ id = "i3kmta"; methods = @("DELETE", "GET", "PUT"); fn = "MaterialsSelection-Projects-API" } # /projects/{projectId}
+    # ── Orders-API ─────────────────────────────────────────────────────────────
+    @{ id = "5ee076"; methods = @("GET"); fn = "MaterialsSelection-Orders-API" } # /projects/{projectId}/orders
+    @{ id = "u4wh4g"; methods = @("GET"); fn = "MaterialsSelection-Orders-API" } # /projects/{projectId}/orderitems
+    @{ id = "ni1e78"; methods = @("POST"); fn = "MaterialsSelection-Orders-API" } # /orders
+    @{ id = "w99z1j"; methods = @("DELETE", "GET", "PUT"); fn = "MaterialsSelection-Orders-API" } # /orders/{id}
+    @{ id = "qmpieg"; methods = @("GET"); fn = "MaterialsSelection-Orders-API" } # /orders/{id}/items
+    @{ id = "xlq6ay"; methods = @("GET"); fn = "MaterialsSelection-Orders-API" } # /orders/{id}/receipts
+    @{ id = "7cat3y"; methods = @("POST"); fn = "MaterialsSelection-Orders-API" } # /orderitems
+    @{ id = "d3t041"; methods = @("DELETE"); fn = "MaterialsSelection-Orders-API" } # /orderitems/{id}
+    @{ id = "gg31t8"; methods = @("POST"); fn = "MaterialsSelection-Orders-API" } # /receipts
+    @{ id = "qas3e9"; methods = @("DELETE"); fn = "MaterialsSelection-Orders-API" } # /receipts/{id}
     # ── AI-API ─────────────────────────────────────────────────────────────────
     @{ id = "3zf2t7"; methods = @("POST"); fn = "MaterialsSelection-AI-API" }       # /ai/chat
     @{ id = "bfuee8"; methods = @("POST"); fn = "MaterialsSelection-AI-API" }       # /ai/test
@@ -245,8 +256,6 @@ Write-Host "  All prod routes now use split lambdas:" -ForegroundColor Green
 Write-Host "    Catalog-API  -> products, vendors, manufacturers, product-vendors"
 Write-Host "    Core-API     -> categories, lineitems, lineitem-options"
 Write-Host "    Projects-API -> projects (+ sharepoint)"
-Write-Host "    Orders-API   -> orders (routes exist in test; NOT yet in prod API)"
+Write-Host "    Orders-API   -> project orders/orderitems + orders, orderitems, receipts"
 Write-Host "    AI-API       -> ai"
-Write-Host ""
-Write-Host "  TODO (future): Add orders/files/sharepoint API routes to prod" -ForegroundColor Yellow
 Write-Host "========================================" -ForegroundColor Green

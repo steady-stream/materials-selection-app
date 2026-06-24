@@ -1,14 +1,10 @@
-import axios from "axios";
 import type { Order, OrderItem, Receipt } from "../types";
-
-const API_URL =
-  import.meta.env.VITE_API_URL ||
-  "https://fiad7hd58j.execute-api.us-east-1.amazonaws.com";
+import apiClient from "./api";
 
 export const orderService = {
   getByProjectId: async (projectId: string): Promise<Order[]> => {
-    const response = await axios.get<Order[]>(
-      `${API_URL}/projects/${projectId}/orders`,
+    const response = await apiClient.get<Order[]>(
+      `/projects/${projectId}/orders`,
     );
     return response.data;
   },
@@ -16,30 +12,30 @@ export const orderService = {
   create: async (
     order: Omit<Order, "id" | "createdAt" | "updatedAt">,
   ): Promise<Order> => {
-    const response = await axios.post<Order>(`${API_URL}/orders`, order);
+    const response = await apiClient.post<Order>("/orders", order);
     return response.data;
   },
 
   update: async (id: string, data: Partial<Order>): Promise<Order> => {
-    const response = await axios.put<Order>(`${API_URL}/orders/${id}`, data);
+    const response = await apiClient.put<Order>(`/orders/${id}`, data);
     return response.data;
   },
 
   delete: async (id: string): Promise<void> => {
-    await axios.delete(`${API_URL}/orders/${id}`);
+    await apiClient.delete(`/orders/${id}`);
   },
 
   // OrderItems
   getOrderItems: async (orderId: string): Promise<OrderItem[]> => {
-    const response = await axios.get<OrderItem[]>(
-      `${API_URL}/orders/${orderId}/items`,
+    const response = await apiClient.get<OrderItem[]>(
+      `/orders/${orderId}/items`,
     );
     return response.data;
   },
 
   getOrderItemsByProject: async (projectId: string): Promise<OrderItem[]> => {
-    const response = await axios.get<OrderItem[]>(
-      `${API_URL}/projects/${projectId}/orderitems`,
+    const response = await apiClient.get<OrderItem[]>(
+      `/projects/${projectId}/orderitems`,
     );
     return response.data;
   },
@@ -47,21 +43,25 @@ export const orderService = {
   createOrderItems: async (
     items: Omit<OrderItem, "id" | "createdAt" | "updatedAt">[],
   ): Promise<OrderItem[]> => {
-    const response = await axios.post<OrderItem[]>(
-      `${API_URL}/orderitems`,
-      items,
-    );
+    const response = await apiClient.post<OrderItem[]>("/orderitems", items);
     return response.data;
   },
 
   deleteOrderItem: async (id: string): Promise<void> => {
-    await axios.delete(`${API_URL}/orderitems/${id}`);
+    await apiClient.delete(`/orderitems/${id}`);
   },
 
   // Receipts
   getReceipts: async (orderId: string): Promise<Receipt[]> => {
-    const response = await axios.get<Receipt[]>(
-      `${API_URL}/orders/${orderId}/receipts`,
+    const response = await apiClient.get<Receipt[]>(
+      `/orders/${orderId}/receipts`,
+    );
+    return response.data;
+  },
+
+  getReceiptsByProject: async (projectId: string): Promise<Receipt[]> => {
+    const response = await apiClient.get<Receipt[]>(
+      `/projects/${projectId}/receipts`,
     );
     return response.data;
   },
@@ -69,14 +69,11 @@ export const orderService = {
   createReceipts: async (
     receipts: Omit<Receipt, "id" | "createdAt" | "updatedAt">[],
   ): Promise<Receipt[]> => {
-    const response = await axios.post<Receipt[]>(
-      `${API_URL}/receipts`,
-      receipts,
-    );
+    const response = await apiClient.post<Receipt[]>("/receipts", receipts);
     return response.data;
   },
 
   deleteReceipt: async (receiptId: string): Promise<void> => {
-    await axios.delete(`${API_URL}/receipts/${receiptId}`);
+    await apiClient.delete(`/receipts/${receiptId}`);
   },
 };

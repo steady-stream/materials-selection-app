@@ -61,6 +61,11 @@ exports.handler = async (event) => {
       return await getOrderItemsByProject(projectId);
     }
 
+    if (path.match(/^\/projects\/[^/]+\/receipts$/) && method === "GET") {
+      const projectId = path.split("/")[2];
+      return await getReceiptsByProject(projectId);
+    }
+
     if (path === "/orderitems" && method === "POST") {
       return await createOrderItems(JSON.parse(event.body));
     }
@@ -206,21 +211,61 @@ async function getOrderItemsByProject(projectId) {
     }),
   );
 
-  // Get order items for all orders
-  const allOrderItems = [];
-  for (const order of ordersResult.Items || []) {
-    const itemsResult = await ddb.send(
-      new QueryCommand({
-        TableName: ORDERITEMS_TABLE,
-        IndexName: "OrderIndex",
-        KeyConditionExpression: "orderId = :orderId",
-        ExpressionAttributeValues: { ":orderId": order.id },
-      }),
-    );
-    allOrderItems.push(...(itemsResult.Items || []));
+  const orderIds = (ordersResult.Items || []).map((order) => order.id);
+  if (orderIds.length === 0) {
+    return { statusCode: 200, headers, body: JSON.stringify([]) };
   }
 
+  // Query all order-item groups in parallel to reduce tail latency.
+  const itemResults = await Promise.all(
+    orderIds.map((orderId) =>
+      ddb.send(
+        new QueryCommand({
+          TableName: ORDERITEMS_TABLE,
+          IndexName: "OrderIndex",
+          KeyConditionExpression: "orderId = :orderId",
+          ExpressionAttributeValues: { ":orderId": orderId },
+        }),
+      ),
+    ),
+  );
+
+  const allOrderItems = itemResults.flatMap((result) => result.Items || []);
+
   return { statusCode: 200, headers, body: JSON.stringify(allOrderItems) };
+}
+
+async function getReceiptsByProject(projectId) {
+  const ordersResult = await ddb.send(
+    new QueryCommand({
+      TableName: ORDERS_TABLE,
+      IndexName: "ProjectIndex",
+      KeyConditionExpression: "projectId = :projectId",
+      ExpressionAttributeValues: { ":projectId": projectId },
+      ProjectionExpression: "id",
+    }),
+  );
+
+  const orderIds = (ordersResult.Items || []).map((order) => order.id);
+  if (orderIds.length === 0) {
+    return { statusCode: 200, headers, body: JSON.stringify([]) };
+  }
+
+  const receiptResults = await Promise.all(
+    orderIds.map((orderId) =>
+      ddb.send(
+        new QueryCommand({
+          TableName: RECEIPTS_TABLE,
+          IndexName: "OrderIndex",
+          KeyConditionExpression: "orderId = :orderId",
+          ExpressionAttributeValues: { ":orderId": orderId },
+        }),
+      ),
+    ),
+  );
+
+  const receipts = receiptResults.flatMap((result) => result.Items || []);
+  return { statusCode: 200, headers, body: JSON.stringify(receipts) };
 }
 
 async function createOrderItems(items) {

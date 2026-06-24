@@ -1,10 +1,10 @@
 # MegaPros Materials Selection App
 
-> DOCUMENT CONTEXT NOTICE (2026-06-03)
+> DOCUMENT CONTEXT NOTICE (2026-06-24)
 >
 > This Statement of Work is a contractual delivery snapshot as of 2026-03-10.
 > It is not the live operational status source.
-> For current environment/deployment status, use docs/CURRENT-STATUS-2026-06-03.md.
+> For current environment/deployment status, use docs/CURRENT-STATUS-2026-06-24.md.
 
 ## Statement of Work — Delivered Features
 

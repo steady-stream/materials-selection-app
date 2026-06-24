@@ -6,6 +6,11 @@ import type {
 import api from "./api";
 
 export const productVendorService = {
+  async getAll(): Promise<ProductVendor[]> {
+    const response = await api.get<ProductVendor[]>("/product-vendors");
+    return response.data;
+  },
+
   async getAllByProduct(productId: string): Promise<ProductVendor[]> {
     const response = await api.get<ProductVendor[]>(
       `/products/${productId}/vendors`,

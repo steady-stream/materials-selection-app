@@ -7,6 +7,14 @@ import type {
 import apiClient from "./api";
 
 export const lineItemOptionService = {
+  // Get all options for all line items in a project
+  getByProjectId: async (projectId: string): Promise<LineItemOption[]> => {
+    const response = await apiClient.get<LineItemOption[]>(
+      `/projects/${projectId}/lineitem-options`,
+    );
+    return response.data;
+  },
+
   // Get all options for a line item
   getByLineItemId: async (lineItemId: string): Promise<LineItemOption[]> => {
     const response = await apiClient.get<LineItemOption[]>(
