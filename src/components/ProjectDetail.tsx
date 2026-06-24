@@ -3105,14 +3105,19 @@ const ProjectDetail = () => {
                                         );
                                         if (!product) {
                                           if (
-                                            productCatalogStatus === "loading" ||
+                                            productCatalogStatus ===
+                                              "loading" ||
                                             productCatalogStatus === "idle"
                                           ) {
                                             return (
-                                              item.modelNumber || item.name || "Loading..."
+                                              item.modelNumber ||
+                                              item.name ||
+                                              "Loading..."
                                             );
                                           }
-                                          return item.modelNumber || item.name || "-";
+                                          return (
+                                            item.modelNumber || item.name || "-"
+                                          );
                                         }
                                         if (product.productUrl) {
                                           return (
@@ -4581,14 +4586,21 @@ const ProjectDetail = () => {
                                           );
                                           if (!product) {
                                             if (
-                                              productCatalogStatus === "loading" ||
+                                              productCatalogStatus ===
+                                                "loading" ||
                                               productCatalogStatus === "idle"
                                             ) {
                                               return (
-                                                item.modelNumber || item.name || "Loading..."
+                                                item.modelNumber ||
+                                                item.name ||
+                                                "Loading..."
                                               );
                                             }
-                                            return item.modelNumber || item.name || "-";
+                                            return (
+                                              item.modelNumber ||
+                                              item.name ||
+                                              "-"
+                                            );
                                           }
                                           if (product.productUrl) {
                                             return (

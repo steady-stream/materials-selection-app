@@ -85,7 +85,7 @@ Primary supporting evidence in repo and session history:
 
 - Repeated "Project not Found" incidents traced to production API route parity gaps after shared-client normalization.
 - Missing production route mappings were added and validated for Catalog and Orders domains.
-- CORS preflight behavior validated with browser-like requests (Origin + Access-Control-Request-* headers).
+- CORS preflight behavior validated with browser-like requests (Origin + Access-Control-Request-\* headers).
 
 ### Route Parity Closure and Script Canonicalization
 
@@ -108,6 +108,25 @@ Primary supporting evidence in repo and session history:
 - Step 2 integration rewiring summary: Updated 59, Skipped 0, Failed 0.
 - Production API deployment completed: deployment ID mrig3d.
 - Key project-level Orders endpoints return success in production.
+
+### Project Page Split-Loading Rollout (Test + Production)
+
+- ProjectDetail product catalog loading is now split from core project payload:
+  - Project shell, sections, line items, and core totals render first.
+  - Product catalog hydrates asynchronously after first render.
+- Insert Product and Select Product flows now hydrate product catalog on-demand with explicit loading/error handling.
+- Additional UX polish deployed:
+  - Product-name column now shows a stable fallback (model number or line-item name) while product-link hydration completes.
+
+Deployment evidence:
+
+- Initial split-loading rollout:
+  - Test invalidation: I5D71N7UPLRBXVNASDSFQ02RWF
+  - Production invalidation: I60PEO07S8EEHYBW8QY867IAKX
+- Product-name hydration fallback polish rollout:
+  - Test invalidation: I9DVZVFVHYEVCYHBPWFWFZ0I0P
+  - Production invalidation: I6SUV13QS1AS41450MTX85XESM
+- Post-deploy availability checks returned HTTP 200 for both test and production URLs.
 
 ---
 
