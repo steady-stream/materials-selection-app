@@ -2,7 +2,7 @@
 
 Use the latest canonical status document:
 
-- docs/CURRENT-STATUS-2026-06-24.md
+- docs/CURRENT-STATUS-2026-06-26.md
 
 Notes:
 
