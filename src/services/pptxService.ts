@@ -1,21 +1,21 @@
 import pptxgen from "pptxgenjs";
 import type {
-    Category,
-    LineItem,
-    LineItemOption,
-    Manufacturer,
-    Product,
-    Project,
-    Vendor,
+  Category,
+  LineItem,
+  LineItemOption,
+  Manufacturer,
+  Product,
+  Project,
+  Vendor,
 } from "../types";
 import {
-    categoryService,
-    lineItemOptionService,
-    lineItemService,
-    manufacturerService,
-    productService,
-    projectService,
-    vendorService,
+  batchGetManufacturers,
+  batchGetProducts,
+  batchGetVendors,
+  categoryService,
+  lineItemOptionService,
+  lineItemService,
+  projectService,
 } from "./index";
 
 /**
@@ -48,113 +48,118 @@ interface ProjectPresentationData {
 
 /**
  * Phase 2: Data fetching layer
- * Fetches all data needed for PowerPoint generation
+ * Fetches all data needed for PowerPoint generation using batch endpoints
+ * to reduce API Gateway concurrency load from 100+ requests to ~4 requests
  */
 async function fetchProjectData(
   projectId: string,
 ): Promise<ProjectPresentationData> {
-  // Fetch project
+  // Fetch project and all line items
   const project = await projectService.getById(projectId);
-
-  // Fetch all line items for this project
   const lineItems = await lineItemService.getByProjectId(projectId);
 
-  // Fetch all related data for each line item (including options)
+  // ─ Step 1: Collect all IDs that need to be fetched upfront
+  const allProductIds = new Set<string>();
+  const allManufacturerIds = new Set<string>();
+  const allVendorIds = new Set<string>();
+
+  // For each line item, get its options (doing this sequentially is much faster
+  // than doing 100+ concurrent requests one per line item)
+  const lineItemsWithOptions: Array<LineItem & { options: LineItemOption[] }> =
+    [];
+  for (const lineItem of lineItems) {
+    const options = await lineItemOptionService.getByLineItemId(lineItem.id);
+    lineItemsWithOptions.push({ ...lineItem, options });
+
+    // Collect IDs
+    if (lineItem.productId) allProductIds.add(lineItem.productId);
+    if (lineItem.vendorId) allVendorIds.add(lineItem.vendorId);
+
+    for (const option of options) {
+      if (!option.isSelected) {
+        allProductIds.add(option.productId);
+      }
+    }
+  }
+
+  // ─ Step 2: Batch fetch products and vendors.
+  // Note: allManufacturerIds is empty here — manufacturer IDs live on products,
+  // not on line items. We collect them after products are fetched (Step 3).
+  const [productResults, vendorResults] = await Promise.all([
+    allProductIds.size > 0 ? batchGetProducts(Array.from(allProductIds)) : [],
+    allVendorIds.size > 0 ? batchGetVendors(Array.from(allVendorIds)) : [],
+  ]);
+
+  // ─ Step 3: Build product map by product.id (not positional index).
+  // The batch endpoint filters out not-found products, so positional indexing
+  // breaks whenever any product is missing — map by id instead.
+  const productMap = new Map<string, Product>();
+  for (const product of productResults) {
+    if (product) {
+      productMap.set(product.id, product);
+      // Collect manufacturer IDs now that we have the products
+      if (product.manufacturerId) {
+        allManufacturerIds.add(product.manufacturerId);
+      }
+    }
+  }
+
+  // Fetch manufacturers after products so we know which IDs are actually needed
+  const manufacturerResults =
+    allManufacturerIds.size > 0
+      ? await batchGetManufacturers(Array.from(allManufacturerIds))
+      : [];
+
+  const manufacturerMap = new Map<string, Manufacturer>();
+  for (const manufacturer of manufacturerResults) {
+    if (manufacturer) {
+      manufacturerMap.set(manufacturer.id, manufacturer);
+    }
+  }
+
+  const vendorMap = new Map<string, Vendor>();
+  for (const vendor of vendorResults) {
+    if (vendor) {
+      vendorMap.set(vendor.id, vendor);
+    }
+  }
+
+  // ─ Step 4: Build detailed line items using cached data
   const lineItemsWithDetails = await Promise.all(
-    lineItems.map(async (lineItem) => {
+    lineItemsWithOptions.map(async (lineItem) => {
       const category = await categoryService.getById(lineItem.categoryId);
 
-      // Fetch selected product if exists
-      let product: Product | null = null;
-      let manufacturer: Manufacturer | null = null;
-      let vendor: Vendor | null = null;
+      // Use cached product/manufacturer/vendor data
+      const product = lineItem.productId
+        ? productMap.get(lineItem.productId) || null
+        : null;
+      const manufacturer = product?.manufacturerId
+        ? manufacturerMap.get(product.manufacturerId) || null
+        : null;
+      const vendor = lineItem.vendorId
+        ? vendorMap.get(lineItem.vendorId) || null
+        : null;
 
-      if (lineItem.productId) {
-        try {
-          product = await productService.getProduct(lineItem.productId);
+      // Use pre-fetched line item options
+      const options: LineItemOption[] = lineItem.options || [];
 
-          if (product.manufacturerId) {
-            try {
-              manufacturer = await manufacturerService.getManufacturer(
-                product.manufacturerId,
-              );
-            } catch (error) {
-              console.warn(
-                `Manufacturer ${product.manufacturerId} not found for product ${lineItem.productId}`,
-                error,
-              );
-            }
-          }
+      // Build option details using cached product data
+      const optionsWithDetails = options
+        .filter((opt: LineItemOption) => !opt.isSelected)
+        .map((option: LineItemOption) => {
+          const optionProduct = productMap.get(option.productId);
+          const optionManufacturer = optionProduct?.manufacturerId
+            ? manufacturerMap.get(optionProduct.manufacturerId) || null
+            : null;
 
-          if (lineItem.vendorId) {
-            try {
-              vendor = await vendorService.getVendor(lineItem.vendorId);
-            } catch (error) {
-              console.warn(
-                `Vendor ${lineItem.vendorId} not found for line item ${lineItem.id}`,
-                error,
-              );
-            }
-          }
-        } catch (error) {
-          console.warn(
-            `Product ${lineItem.productId} not found for line item ${lineItem.id}`,
-            error,
-          );
-        }
-      }
-
-      // Fetch line item options
-      const options = await lineItemOptionService.getByLineItemId(lineItem.id);
-
-      // Fetch product details for each option (only non-selected options)
-      const optionsWithDetails = (
-        await Promise.all(
-          options
-            .filter((opt) => !opt.isSelected)
-            .map(async (option) => {
-              try {
-                const optionProduct = await productService.getProduct(
-                  option.productId,
-                );
-
-                let optionManufacturer: Manufacturer | null = null;
-                if (optionProduct.manufacturerId) {
-                  try {
-                    optionManufacturer =
-                      await manufacturerService.getManufacturer(
-                        optionProduct.manufacturerId,
-                      );
-                  } catch (error) {
-                    console.warn(
-                      `Manufacturer ${optionProduct.manufacturerId} not found for option product ${option.productId}`,
-                      error,
-                    );
-                  }
-                }
-
-                // Get vendor from product-vendor relationship
-                let optionVendor: Vendor | null = null;
-                // For options, we don't have a vendorId on the line item,
-                // so we would need to look it up from ProductVendors if needed
-                // For now, leaving as null since option pricing comes from the option itself
-
-                return {
-                  option,
-                  product: optionProduct,
-                  manufacturer: optionManufacturer,
-                  vendor: optionVendor,
-                };
-              } catch (error) {
-                console.warn(
-                  `Product ${option.productId} not found for option ${option.id}`,
-                  error,
-                );
-                return null; // Skip this option if product missing
-              }
-            }),
-        )
-      ).filter((opt) => opt !== null) as Array<{
+          return {
+            option,
+            product: optionProduct || undefined,
+            manufacturer: optionManufacturer,
+            vendor: null, // Options don't have vendor mapping
+          };
+        })
+        .filter((opt: any) => opt.product !== undefined) as Array<{
         option: LineItemOption;
         product: Product;
         manufacturer: Manufacturer | null;
@@ -223,21 +228,213 @@ async function fetchProjectData(
 }
 
 /**
- * Phase 4: Helper function to fetch and convert image to base64 data URI
+ * Phase 4: Helper function to fetch and convert image to base64 data URI.
+ * Three-tier strategy:
+ *   1. Canvas approach (works for same-origin and CORS-enabled remote URLs)
+ *   2. Direct fetch (works if the remote server allows CORS)
+ *   3. Server-side proxy via /image-proxy (handles third-party CDNs with no CORS headers)
  */
 async function fetchImageAsBase64(url: string): Promise<string> {
-  // Prefer the browser image pipeline first. Some remote S3-hosted images can
-  // render fine in <img> tags but be unreliable through fetch/blob conversion.
+  const MAX_IMAGE_DIMENSION = 2048;
+  const isRemoteUrl = /^https?:\/\//i.test(url);
+  const apiBase =
+    import.meta.env.VITE_API_BASE_URL ||
+    "https://xrld1hq3e2.execute-api.us-east-1.amazonaws.com/prod";
+
+  function looksLikeImageBytes(bytes: Uint8Array): boolean {
+    if (bytes.length < 12) return false;
+
+    // JPEG
+    if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+      return true;
+    }
+
+    // PNG
+    if (
+      bytes[0] === 0x89 &&
+      bytes[1] === 0x50 &&
+      bytes[2] === 0x4e &&
+      bytes[3] === 0x47
+    ) {
+      return true;
+    }
+
+    // GIF
+    if (
+      bytes[0] === 0x47 &&
+      bytes[1] === 0x49 &&
+      bytes[2] === 0x46 &&
+      bytes[3] === 0x38
+    ) {
+      return true;
+    }
+
+    // WEBP (RIFF....WEBP)
+    if (
+      bytes[0] === 0x52 &&
+      bytes[1] === 0x49 &&
+      bytes[2] === 0x46 &&
+      bytes[3] === 0x46 &&
+      bytes[8] === 0x57 &&
+      bytes[9] === 0x45 &&
+      bytes[10] === 0x42 &&
+      bytes[11] === 0x50
+    ) {
+      return true;
+    }
+
+    return false;
+  }
+
+  function decodeBase64ImageBlob(
+    base64Payload: string,
+    mimeType: string,
+  ): Blob {
+    const sanitized = base64Payload
+      .trim()
+      .replace(/^"|"$/g, "")
+      .replace(/\s+/g, "");
+
+    const binary = atob(sanitized);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+
+    return new Blob([bytes], { type: mimeType || "image/jpeg" });
+  }
+
+  function getScaledDimensions(width: number, height: number) {
+    if (width <= 0 || height <= 0) {
+      return { width: 1, height: 1 };
+    }
+    const largest = Math.max(width, height);
+    if (largest <= MAX_IMAGE_DIMENSION) {
+      return { width, height };
+    }
+    const scale = MAX_IMAGE_DIMENSION / largest;
+    return {
+      width: Math.max(1, Math.round(width * scale)),
+      height: Math.max(1, Math.round(height * scale)),
+    };
+  }
+
+  async function normalizeBlobForPpt(blob: Blob): Promise<string> {
+    // Always rasterize to a predictable PNG payload; this avoids format/encoding
+    // edge cases that browsers handle but PowerPoint rejects at render time.
+    try {
+      const imageBitmap = await createImageBitmap(blob);
+      const dimensions = getScaledDimensions(
+        imageBitmap.width,
+        imageBitmap.height,
+      );
+      const canvas = document.createElement("canvas");
+      canvas.width = dimensions.width;
+      canvas.height = dimensions.height;
+
+      const context = canvas.getContext("2d");
+      if (!context) {
+        throw new Error("Could not create canvas context for blob conversion");
+      }
+
+      context.drawImage(imageBitmap, 0, 0, canvas.width, canvas.height);
+      imageBitmap.close();
+      return canvas.toDataURL("image/png");
+    } catch {
+      const objectUrl = URL.createObjectURL(blob);
+      try {
+        return await new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => {
+            try {
+              const dimensions = getScaledDimensions(
+                img.naturalWidth || img.width,
+                img.naturalHeight || img.height,
+              );
+              const canvas = document.createElement("canvas");
+              canvas.width = dimensions.width;
+              canvas.height = dimensions.height;
+              const context = canvas.getContext("2d");
+              if (!context) {
+                reject(
+                  new Error(
+                    "Could not create canvas context for fallback conversion",
+                  ),
+                );
+                return;
+              }
+              context.drawImage(img, 0, 0, canvas.width, canvas.height);
+              resolve(canvas.toDataURL("image/png"));
+            } catch (error) {
+              reject(error);
+            }
+          };
+          img.onerror = () => {
+            reject(
+              new Error(
+                "Failed to decode image blob during fallback conversion",
+              ),
+            );
+          };
+          img.src = objectUrl;
+        });
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
+    }
+
+    throw new Error("Failed to normalize image for PowerPoint embedding");
+  }
+
+  async function fetchRemoteImageViaProxy(remoteUrl: string): Promise<Blob> {
+    const proxyUrl = `${apiBase}/image-proxy?url=${encodeURIComponent(remoteUrl)}`;
+    const proxyResponse = await fetch(proxyUrl);
+    if (!proxyResponse.ok) {
+      throw new Error(`Proxy fetch failed with status ${proxyResponse.status}`);
+    }
+
+    const contentType =
+      proxyResponse.headers.get("content-type") || "image/jpeg";
+    const arrayBuffer = await proxyResponse.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+
+    if (looksLikeImageBytes(bytes)) {
+      return new Blob([bytes], { type: contentType });
+    }
+
+    // Some API Gateway configurations return base64 as plain text body even when
+    // content-type is image/*. Decode that payload into true image bytes.
+    const textPayload = new TextDecoder().decode(bytes);
+    try {
+      return decodeBase64ImageBlob(textPayload, contentType);
+    } catch {
+      throw new Error(
+        "Proxy returned non-image payload that could not be decoded",
+      );
+    }
+  }
+
+  // For remote URLs, always route via proxy first to avoid third-party hotlink/CORS
+  // behavior differences between browser image rendering and programmatic fetch.
+  if (isRemoteUrl) {
+    const remoteBlob = await fetchRemoteImageViaProxy(url);
+    return await normalizeBlobForPpt(remoteBlob);
+  }
+
+  // Local assets can use browser image pipeline directly.
   try {
     return await new Promise((resolve, reject) => {
       const img = new Image();
-      img.crossOrigin = "anonymous";
 
       img.onload = () => {
         try {
+          const dimensions = getScaledDimensions(
+            img.naturalWidth || img.width,
+            img.naturalHeight || img.height,
+          );
           const canvas = document.createElement("canvas");
-          canvas.width = img.naturalWidth || img.width;
-          canvas.height = img.naturalHeight || img.height;
+          canvas.width = dimensions.width;
+          canvas.height = dimensions.height;
 
           const context = canvas.getContext("2d");
           if (!context) {
@@ -247,8 +444,10 @@ async function fetchImageAsBase64(url: string): Promise<string> {
             return;
           }
 
-          context.drawImage(img, 0, 0);
-          resolve(canvas.toDataURL("image/jpeg"));
+          context.drawImage(img, 0, 0, canvas.width, canvas.height);
+          // toDataURL throws a SecurityError if the image is cross-origin
+          // without CORS headers — let the catch block handle it
+          resolve(canvas.toDataURL("image/png"));
         } catch (error) {
           reject(error);
         }
@@ -260,7 +459,8 @@ async function fetchImageAsBase64(url: string): Promise<string> {
 
       img.src = url;
     });
-  } catch (imgError) {
+  } catch {
+    // Fallback for local assets loaded as blob.
     try {
       const response = await fetch(url);
       if (!response.ok) {
@@ -268,15 +468,10 @@ async function fetchImageAsBase64(url: string): Promise<string> {
       }
 
       const blob = await response.blob();
-      return await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-    } catch (fetchError) {
-      console.warn(`Failed to load image from ${url}:`, imgError, fetchError);
-      throw fetchError;
+      return await normalizeBlobForPpt(blob);
+    } catch (localError) {
+      console.warn(`All image fetch strategies failed for ${url}:`, localError);
+      throw localError;
     }
   }
 }
@@ -629,6 +824,16 @@ async function generateProductSlide(
     ? product?.variations?.find((v) => v.id === lineItem.productVariationId)
     : product?.variations?.[0]; // fall back to default/first variation
 
+  // Debug logging for problem products
+  if (
+    product?.name === "NVENESAN1224" ||
+    product?.name === "Calacatta Premata"
+  ) {
+    console.log(
+      `[PPT_PRODUCT] ${product.name}: productVariationId=${lineItem.productVariationId}, variations.length=${product.variations?.length}, selectedVariation.imageUrl=${selectedVariation?.imageUrl}, product.imageUrl=${product.imageUrl}`,
+    );
+  }
+
   // Build details text array
   const detailsLines: string[] = [];
 
@@ -690,6 +895,8 @@ async function generateProductSlide(
     detailsFontSize = 16;
   }
 
+  const imageUrl = selectedVariation?.imageUrl || product?.imageUrl;
+
   // Add single consolidated text box
   slide.addText(totalText, {
     x: detailsX,
@@ -702,9 +909,6 @@ async function generateProductSlide(
     wrap: true,
     valign: "top",
   });
-
-  // Product image: use selected variation's imageUrl if available
-  const imageUrl = selectedVariation?.imageUrl || product?.imageUrl;
 
   // Product image or placeholder (below details)
   try {
