@@ -4,7 +4,7 @@
 >
 > This Statement of Work is a contractual delivery snapshot as of 2026-03-10.
 > It is not the live operational status source.
-> For current environment/deployment status, use docs/CURRENT-STATUS-2026-06-24.md.
+> For current environment/deployment status, use docs/CURRENT-STATUS-2026-06-26.md.
 
 ## Statement of Work — Delivered Features
 
@@ -18,6 +18,20 @@
 ## Overview
 
 The MegaPros Materials Selection App is a cloud-hosted web application purpose-built to replace the Excel-based workflow currently used to track materials, products, vendors, and project budgets for residential renovation projects. The application provides a fully integrated system covering product catalog management, project tracking, vendor coordination, purchase order management, customer-facing materials presentations, document storage, and AI-assisted project support.
+
+---
+
+## Current Addendum (June 26, 2026)
+
+The feature descriptions below remain the contractual delivery snapshot as of March 10, 2026. Since that date, the live application and deployment footprint have been further stabilized and updated as follows:
+
+- **Canonical live-status source updated** — operational status is now tracked in `docs/CURRENT-STATUS-2026-06-26.md`, which supersedes older CURRENT-STATUS snapshots.
+- **Frontend runtime modernized** — the current application runtime uses React 19, React Router 7, Vite 7, and Tailwind CSS v4.
+- **Production/test API parity restored** — all non-SharePoint/non-files routes and methods are now aligned between test and production.
+- **Batch API endpoints added and verified** — product, vendor, manufacturer, and line-item option batch endpoints now support lower-latency project loading and more reliable PowerPoint export workflows.
+- **Project detail loading optimized** — project shell data renders first, with heavier catalog hydration deferred and backed by fallback paths when optional routes are unavailable.
+- **Salesforce workflow reverified** — Salesforce opportunity list/detail flows were smoke-tested successfully in both test and production on June 26, 2026.
+- **SharePoint remains intentionally test-only in production routing** — production deployment of SharePoint/file routes is still pending separate API Gateway rollout work.
 
 ---
 

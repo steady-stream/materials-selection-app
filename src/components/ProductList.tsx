@@ -1,5 +1,10 @@
 import axios from "axios";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+    matchesOptionValue,
+    PRODUCT_COLOR_OPTIONS,
+    PRODUCT_FINISH_OPTIONS,
+} from "../constants/productOptionLists";
 import {
     manufacturerService,
     productService,
@@ -309,6 +314,7 @@ const ProductList = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [productNameSearchTerm, setProductNameSearchTerm] = useState("");
   const [filterView, setFilterView] = useState<FilterView>("all");
   const [selectedManufacturerId, setSelectedManufacturerId] =
     useState<string>("");
@@ -1090,6 +1096,15 @@ const ProductList = () => {
     URL.revokeObjectURL(url);
   };
 
+  const sortedManufacturers = [...manufacturers].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+  const sortedVendors = [...vendors].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+  const colorOptions = useMemo(() => [...PRODUCT_COLOR_OPTIONS], []);
+  const finishOptions = useMemo(() => [...PRODUCT_FINISH_OPTIONS], []);
+
   // Filter products based on view and search
   const filteredProducts = products.filter((product) => {
     // Filter by view
@@ -1122,12 +1137,39 @@ const ProductList = () => {
     }
 
     // Filter by color
-    if (colorFilter && product.color !== colorFilter) return false;
+    if (colorFilter) {
+      const productColorValues = [
+        product.color,
+        ...(product.variations || []).map((variation) => variation.color),
+      ].filter((value): value is string => Boolean(value));
+      if (
+        !productColorValues.some((value) =>
+          matchesOptionValue(value, colorFilter),
+        )
+      )
+        return false;
+    }
 
     // Filter by finish
-    if (finishFilter && product.finish !== finishFilter) return false;
+    if (finishFilter) {
+      const productFinishValues = [
+        product.finish,
+        ...(product.variations || []).map((variation) => variation.finish),
+      ].filter((value): value is string => Boolean(value));
+      if (
+        !productFinishValues.some((value) =>
+          matchesOptionValue(value, finishFilter),
+        )
+      )
+        return false;
+    }
 
-    // Filter by search term
+    if (productNameSearchTerm) {
+      const nameSearch = productNameSearchTerm.toLowerCase();
+      if (!product.name.toLowerCase().includes(nameSearch)) return false;
+    }
+
+    // Filter by general search term
     if (searchTerm) {
       const search = searchTerm.toLowerCase();
       const manufacturer = manufacturers.find(
@@ -1137,16 +1179,20 @@ const ProductList = () => {
       const vendorNames = productVendorList
         .map((pv) => vendors.find((v) => v.id === pv.vendorId)?.name || "")
         .join(" ");
-      return (
-        product.name.toLowerCase().includes(search) ||
-        product.modelNumber?.toLowerCase().includes(search) ||
-        product.description?.toLowerCase().includes(search) ||
-        product.category?.toLowerCase().includes(search) ||
-        product.color?.toLowerCase().includes(search) ||
-        product.finish?.toLowerCase().includes(search) ||
-        manufacturer?.name.toLowerCase().includes(search) ||
-        vendorNames.toLowerCase().includes(search)
-      );
+      const searchableValues = [
+        product.name,
+        product.modelNumber,
+        product.description,
+        product.category,
+        product.color,
+        product.finish,
+        manufacturer?.name,
+        vendorNames,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (!searchableValues.includes(search)) return false;
     }
 
     return true;
@@ -1243,7 +1289,7 @@ const ProductList = () => {
             className="px-2 py-1 text-xs border rounded-lg focus:ring-2 focus:ring-indigo-500"
           >
             <option value="">Select Manufacturer...</option>
-            {manufacturers.map((m) => (
+            {sortedManufacturers.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.name}
               </option>
@@ -1258,7 +1304,7 @@ const ProductList = () => {
             className="px-2 py-1 text-xs border rounded-lg focus:ring-2 focus:ring-indigo-500"
           >
             <option value="">Select Vendor...</option>
-            {vendors.map((v) => (
+            {sortedVendors.map((v) => (
               <option key={v.id} value={v.id}>
                 {v.name}
               </option>
@@ -1331,13 +1377,11 @@ const ProductList = () => {
             className="px-2 py-1 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
           >
             <option value="">All Colors</option>
-            {Array.from(new Set(products.map((p) => p.color).filter(Boolean)))
-              .sort()
-              .map((color) => (
-                <option key={color} value={color}>
-                  {color}
-                </option>
-              ))}
+            {colorOptions.map((color) => (
+              <option key={color} value={color}>
+                {color}
+              </option>
+            ))}
           </select>
         </div>
         {/* Finish Filter */}
@@ -1349,26 +1393,41 @@ const ProductList = () => {
             className="px-2 py-1 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
           >
             <option value="">All Finishes</option>
-            {Array.from(new Set(products.map((p) => p.finish).filter(Boolean)))
-              .sort()
-              .map((finish) => (
-                <option key={finish} value={finish}>
-                  {finish}
-                </option>
-              ))}
+            {finishOptions.map((finish) => (
+              <option key={finish} value={finish}>
+                {finish}
+              </option>
+            ))}
           </select>
         </div>
       </div>
 
       {/* Search */}
-      <div className="mt-3">
-        <input
-          type="text"
-          placeholder="Search products by name, model, category, or manufacturer..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full px-2 py-1 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-        />
+      <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label className="mb-1 block text-xs font-medium text-gray-700">
+            General Search
+          </label>
+          <input
+            type="text"
+            placeholder="Search by model, category, manufacturer, vendor, color, finish..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full px-2 py-1 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-gray-700">
+            Product Name
+          </label>
+          <input
+            type="text"
+            placeholder="Filter by product name"
+            value={productNameSearchTerm}
+            onChange={(e) => setProductNameSearchTerm(e.target.value)}
+            className="w-full px-2 py-1 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+          />
+        </div>
       </div>
 
       {/* Products Table */}
@@ -1892,7 +1951,7 @@ const ProductList = () => {
                       className="flex-1 px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
                     >
                       <option value="">Select Manufacturer...</option>
-                      {manufacturers.map((m) => (
+                      {sortedManufacturers.map((m) => (
                         <option key={m.id} value={m.id}>
                           {m.name}
                         </option>
@@ -2418,74 +2477,14 @@ const ProductList = () => {
                     ))}
                   </div>
                   <datalist id="product-colors">
-                    <option value="White" />
-                    <option value="Off-White" />
-                    <option value="Ivory" />
-                    <option value="Cream" />
-                    <option value="Almond" />
-                    <option value="Bone" />
-                    <option value="Biscuit" />
-                    <option value="Pearl" />
-                    <option value="Black" />
-                    <option value="Gray" />
-                    <option value="Slate" />
-                    <option value="Charcoal" />
-                    <option value="Graphite" />
-                    <option value="Silver" />
-                    <option value="Beige" />
-                    <option value="Tan" />
-                    <option value="Taupe" />
-                    <option value="Sand" />
-                    <option value="Brown" />
-                    <option value="Mocha" />
-                    <option value="Espresso" />
-                    <option value="Walnut" />
-                    <option value="Natural" />
-                    <option value="Blue" />
-                    <option value="Navy" />
-                    <option value="Red" />
-                    <option value="Green" />
-                    <option value="Sage" />
-                    <option value="Copper" />
-                    <option value="Clear" />
+                    {colorOptions.map((color) => (
+                      <option key={color} value={color} />
+                    ))}
                   </datalist>
                   <datalist id="product-finishes">
-                    <option value="Aged Brass" />
-                    <option value="Black Stainless" />
-                    <option value="Brilliance Black Onyx" />
-                    <option value="Brilliance Brushed Nickel" />
-                    <option value="Brilliance Polished Gold" />
-                    <option value="Brilliance Polished Nickel" />
-                    <option value="Brilliance Stainless" />
-                    <option value="Bronzed Gold" />
-                    <option value="Brushed Bronze" />
-                    <option value="Brushed Gold" />
-                    <option value="Brushed Gold PVD" />
-                    <option value="Brushed Moderne Brass" />
-                    <option value="Brushed Nickel" />
-                    <option value="Brushed Nickel PVD" />
-                    <option value="Champagne Bronze" />
-                    <option value="Chrome" />
-                    <option value="Cocoa Bronze" />
-                    <option value="French Gold" />
-                    <option value="Gunmetal" />
-                    <option value="Luxe Nickel" />
-                    <option value="Luxe Steel" />
-                    <option value="Matte Black" />
-                    <option value="Matte White" />
-                    <option value="Oil-Rubbed Bronze" />
-                    <option value="Polished Brass" />
-                    <option value="Polished Brass PVD" />
-                    <option value="Polished Chrome" />
-                    <option value="Polished Nickel" />
-                    <option value="Polished Nickel PVD" />
-                    <option value="Satin Copper" />
-                    <option value="Spot Resist Stainless" />
-                    <option value="Stainless / Arctic Stainless" />
-                    <option value="Stainless Steel PVD" />
-                    <option value="Titanium" />
-                    <option value="Venetian Bronze" />
-                    <option value="Vibrant Stainless" />
+                    {finishOptions.map((finish) => (
+                      <option key={finish} value={finish} />
+                    ))}
                   </datalist>
                 </div>
                 {!editingProduct && (
@@ -2509,7 +2508,7 @@ const ProductList = () => {
                             className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
                           >
                             <option value="">Select Vendor...</option>
-                            {vendors.map((v) => (
+                            {sortedVendors.map((v) => (
                               <option key={v.id} value={v.id}>
                                 {v.name}
                               </option>

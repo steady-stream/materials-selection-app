@@ -1,4 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+    matchesOptionValue,
+    PRODUCT_COLOR_OPTIONS,
+    PRODUCT_FINISH_OPTIONS,
+} from "../constants/productOptionLists";
 import { lineItemOptionService, lineItemService } from "../services";
 import type {
     CreateLineItemOptionRequest,
@@ -20,6 +25,27 @@ interface ChooseOptionsModalProps {
   onOptionsChanged: () => void;
 }
 
+const getProductColorFinishSummary = (product: Product): string => {
+  const values = new Set<string>();
+
+  (product.variations || []).forEach((variation) => {
+    const colorFinish = [variation.color, variation.finish]
+      .filter(Boolean)
+      .join(" / ");
+    if (colorFinish) values.add(colorFinish);
+  });
+
+  const baseColorFinish = [product.color, product.finish]
+    .filter(Boolean)
+    .join(" / ");
+  if (baseColorFinish) values.add(baseColorFinish);
+
+  const uniqueValues = Array.from(values);
+  if (uniqueValues.length === 0) return "-";
+  if (uniqueValues.length === 1) return uniqueValues[0];
+  return "Varies by variation";
+};
+
 export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
   lineItem,
   products,
@@ -31,17 +57,13 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
 }) => {
   // Filter states (for available products)
   const [searchTerm, setSearchTerm] = useState("");
+  const [productNameSearchTerm, setProductNameSearchTerm] = useState("");
   const [filterVendorId, setFilterVendorId] = useState("");
   const [filterManufacturerId, setFilterManufacturerId] = useState("");
   const [filterCategory, setFilterCategory] = useState("");
   const [filterCollection, setFilterCollection] = useState("");
   const [filterColor, setFilterColor] = useState("");
   const [filterFinish, setFilterFinish] = useState("");
-  const [filterTier, setFilterTier] = useState({
-    good: false,
-    better: false,
-    best: false,
-  });
 
   // Hover state for product tooltip
   const [hoverProduct, setHoverProduct] = useState<string | null>(null);
@@ -311,7 +333,14 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
   const getFilteredProducts = () => {
     let filtered = products;
 
-    // Search term filter
+    if (productNameSearchTerm) {
+      const productNameSearch = productNameSearchTerm.toLowerCase();
+      filtered = filtered.filter((p) =>
+        p.name.toLowerCase().includes(productNameSearch),
+      );
+    }
+
+    // General search term filter
     if (searchTerm) {
       const search = searchTerm.toLowerCase();
       filtered = filtered.filter((p) => {
@@ -346,19 +375,6 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
       );
     }
 
-    // Tier filter
-    const anyTierFilterActive =
-      filterTier.good || filterTier.better || filterTier.best;
-    if (anyTierFilterActive) {
-      filtered = filtered.filter((p) => {
-        if (!p.tier) return false;
-        if (p.tier === "good" && !filterTier.good) return false;
-        if (p.tier === "better" && !filterTier.better) return false;
-        if (p.tier === "best" && !filterTier.best) return false;
-        return true;
-      });
-    }
-
     // Collection filter
     if (filterCollection) {
       const collectionSearch = filterCollection.toLowerCase();
@@ -369,12 +385,28 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
 
     // Color filter
     if (filterColor) {
-      filtered = filtered.filter((p) => p.color === filterColor);
+      filtered = filtered.filter((p) => {
+        const colorValues = [
+          p.color,
+          ...(p.variations || []).map((variation) => variation.color),
+        ];
+        return colorValues.some((value) =>
+          matchesOptionValue(value, filterColor),
+        );
+      });
     }
 
     // Finish filter
     if (filterFinish) {
-      filtered = filtered.filter((p) => p.finish === filterFinish);
+      filtered = filtered.filter((p) => {
+        const finishValues = [
+          p.finish,
+          ...(p.variations || []).map((variation) => variation.finish),
+        ];
+        return finishValues.some((value) =>
+          matchesOptionValue(value, filterFinish),
+        );
+      });
     }
 
     // Vendor filter
@@ -389,41 +421,49 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
   };
 
   const filteredProducts = getFilteredProducts();
+  const sortedManufacturers = [...manufacturers].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+  const sortedVendors = [...vendors].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+  const colorOptions = useMemo(() => [...PRODUCT_COLOR_OPTIONS], []);
+  const finishOptions = useMemo(() => [...PRODUCT_FINISH_OPTIONS], []);
 
   return (
     <div className="fixed inset-0 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-2xl border-2 border-gray-300 p-4 w-full max-w-6xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-2xl border-2 border-gray-300 p-3 w-full max-w-6xl h-[min(82vh,860px)] max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-semibold text-gray-900">
-            Choose Line Item Options
-          </h3>
+        <div className="flex items-start justify-between gap-3 mb-1.5">
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-gray-900">
+              Choose Line Item Options
+            </h3>
+            <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-gray-600">
+              <span className="font-medium text-gray-700 truncate">
+                {lineItem.name}
+              </span>
+              <span className="text-gray-400">•</span>
+              <span>Qty: {lineItem.quantity}</span>
+              {lineItem.allowance !== undefined && lineItem.allowance > 0 && (
+                <>
+                  <span className="text-gray-400">•</span>
+                  <span>Allowance: ${lineItem.allowance.toFixed(2)}</span>
+                </>
+              )}
+            </div>
+          </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-xl font-bold"
+            className="text-gray-400 hover:text-gray-600 text-xl font-bold shrink-0"
           >
             ×
           </button>
         </div>
 
-        {/* Line Item Details */}
-        <div className="mb-3 pb-3 border-b border-gray-200">
-          <div className="text-xs text-gray-700">
-            <span className="font-medium">{lineItem.name}</span>
-            {" • "}
-            <span>Qty: {lineItem.quantity}</span>
-            {lineItem.allowance !== undefined && lineItem.allowance > 0 && (
-              <>
-                {" • "}
-                <span>Allowance: ${lineItem.allowance.toFixed(2)}</span>
-              </>
-            )}
-          </div>
-        </div>
-
         {/* Selected Options Section */}
         {!loading && selectedOptions.length > 0 && (
-          <div className="mb-4 bg-green-50 border border-green-200 p-3 rounded-lg">
+          <div className="mb-2 bg-green-50 border border-green-200 p-2 rounded-lg max-h-44 overflow-auto">
             <h4 className="text-xs font-semibold text-gray-900 mb-2">
               Selected Options ({selectedOptions.length})
             </h4>
@@ -624,11 +664,11 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
         )}
 
         {/* Filter Section */}
-        <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg mb-4 space-y-3">
-          <div className="grid grid-cols-4 gap-3">
+        <div className="bg-blue-50 border border-blue-200 p-2.5 rounded-lg mb-2 space-y-2">
+          <div className="grid grid-cols-4 gap-2">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                Search
+              <label className="block text-[11px] font-medium text-gray-700 mb-1">
+                General Search
               </label>
               <input
                 type="text"
@@ -639,7 +679,7 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
+              <label className="block text-[11px] font-medium text-gray-700 mb-1">
                 Vendor
               </label>
               <select
@@ -648,7 +688,7 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
                 className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
               >
                 <option value="">All Vendors</option>
-                {vendors.map((v) => (
+                {sortedVendors.map((v) => (
                   <option key={v.id} value={v.id}>
                     {v.name}
                   </option>
@@ -656,7 +696,7 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
+              <label className="block text-[11px] font-medium text-gray-700 mb-1">
                 Manufacturer
               </label>
               <select
@@ -665,7 +705,7 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
                 className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
               >
                 <option value="">All Manufacturers</option>
-                {manufacturers.map((m) => (
+                {sortedManufacturers.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.name}
                   </option>
@@ -673,8 +713,8 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                Category
+              <label className="block text-[11px] font-medium text-gray-700 mb-1">
+                Product Category
               </label>
               <input
                 type="text"
@@ -684,8 +724,57 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
                 className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
               />
             </div>
+          </div>
+
+          <div className="grid grid-cols-4 gap-2">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
+              <label className="block text-[11px] font-medium text-gray-700 mb-1">
+                Product Name
+              </label>
+              <input
+                type="text"
+                value={productNameSearchTerm}
+                onChange={(e) => setProductNameSearchTerm(e.target.value)}
+                placeholder="Filter by product name"
+                className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-gray-700 mb-1">
+                Color
+              </label>
+              <select
+                value={filterColor}
+                onChange={(e) => setFilterColor(e.target.value)}
+                className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="">All Colors</option>
+                {colorOptions.map((color) => (
+                  <option key={color} value={color}>
+                    {color}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-gray-700 mb-1">
+                Finish
+              </label>
+              <select
+                value={filterFinish}
+                onChange={(e) => setFilterFinish(e.target.value)}
+                className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="">All Finishes</option>
+                {finishOptions.map((finish) => (
+                  <option key={finish} value={finish}>
+                    {finish}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-gray-700 mb-1">
                 Collection
               </label>
               <input
@@ -695,95 +784,15 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
                 placeholder="Filter by collection..."
                 className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
               />
-            </div>{" "}
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                Color
-              </label>
-              <select
-                value={filterColor}
-                onChange={(e) => setFilterColor(e.target.value)}
-                className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="">All Colors</option>
-                {Array.from(
-                  new Set(products.map((p) => p.color).filter(Boolean)),
-                )
-                  .sort()
-                  .map((color) => (
-                    <option key={color} value={color}>
-                      {color}
-                    </option>
-                  ))}
-              </select>
-            </div>{" "}
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                Finish
-              </label>
-              <select
-                value={filterFinish}
-                onChange={(e) => setFilterFinish(e.target.value)}
-                className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="">All Finishes</option>
-                {Array.from(
-                  new Set(products.map((p) => p.finish).filter(Boolean)),
-                )
-                  .sort()
-                  .map((finish) => (
-                    <option key={finish} value={finish}>
-                      {finish}
-                    </option>
-                  ))}
-              </select>
-            </div>{" "}
-          </div>
-
-          {/* Tier Checkboxes */}
-          <div className="flex items-center gap-4">
-            <span className="text-xs font-medium text-gray-700">Tier:</span>
-            <label className="flex items-center gap-1 text-xs cursor-pointer">
-              <input
-                type="checkbox"
-                checked={filterTier.good}
-                onChange={(e) =>
-                  setFilterTier({ ...filterTier, good: e.target.checked })
-                }
-                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-              />
-              <span>Good</span>
-            </label>
-            <label className="flex items-center gap-1 text-xs cursor-pointer">
-              <input
-                type="checkbox"
-                checked={filterTier.better}
-                onChange={(e) =>
-                  setFilterTier({ ...filterTier, better: e.target.checked })
-                }
-                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-              />
-              <span>Better</span>
-            </label>
-            <label className="flex items-center gap-1 text-xs cursor-pointer">
-              <input
-                type="checkbox"
-                checked={filterTier.best}
-                onChange={(e) =>
-                  setFilterTier({ ...filterTier, best: e.target.checked })
-                }
-                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-              />
-              <span>Best</span>
-            </label>
+            </div>
           </div>
         </div>
 
         {/* Available Products Table */}
-        <div className="border rounded-md overflow-hidden">
-          <div className="overflow-x-auto max-h-96 overflow-y-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-100 sticky top-0">
+        <div className="border rounded-md overflow-hidden flex-1 min-h-0 min-w-0 flex flex-col">
+          <div className="flex-1 overflow-x-auto overflow-y-auto">
+            <table className="w-full min-w-[980px] divide-y divide-gray-200">
+              <thead className="bg-gray-100 sticky top-0 z-10">
                 <tr>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">
                     Product
@@ -795,16 +804,16 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
                     Manufacturer
                   </th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">
-                    Category
+                    Color / Finish
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">
+                    Collection
                   </th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">
                     Tier
                   </th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">
                     Vendor(s)
-                  </th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">
-                    Cost
                   </th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">
                     Unit
@@ -826,9 +835,6 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
                     const productVendorList = productVendors.filter(
                       (pv) => pv.productId === product.id,
                     );
-                    const primaryPV =
-                      productVendorList.find((pv) => pv.isPrimary) ||
-                      productVendorList[0];
                     const variationCount = product.variations?.length || 0;
                     const hasMultipleVariations = variationCount > 1;
                     const selectedVariationId =
@@ -1009,7 +1015,10 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
                           {manufacturer?.name || "-"}
                         </td>
                         <td className="px-3 py-2 text-xs text-gray-600">
-                          {product.category || "-"}
+                          {getProductColorFinishSummary(product)}
+                        </td>
+                        <td className="px-3 py-2 text-xs text-gray-600">
+                          {product.collection || "-"}
                         </td>
                         <td className="px-3 py-2 text-xs text-gray-600">
                           {product.tier ? (
@@ -1060,9 +1069,6 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
                           ) : (
                             "-"
                           )}
-                        </td>
-                        <td className="px-3 py-2 text-xs text-gray-600">
-                          {primaryPV ? `$${primaryPV.cost.toFixed(2)}` : "-"}
                         </td>
                         <td className="px-3 py-2 text-xs text-gray-600">
                           {product.unit || "-"}
@@ -1154,16 +1160,6 @@ export const ChooseOptionsModal: React.FC<ChooseOptionsModalProps> = ({
               </tbody>
             </table>
           </div>
-        </div>
-
-        {/* Modal Footer */}
-        <div className="flex justify-end gap-2 mt-4 pt-3 border-t">
-          <button
-            onClick={onClose}
-            className="px-3 py-1 text-xs text-gray-700 hover:text-gray-900"
-          >
-            Close
-          </button>
         </div>
       </div>
     </div>

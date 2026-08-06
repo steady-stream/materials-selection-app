@@ -1,21 +1,21 @@
 import pptxgen from "pptxgenjs";
 import type {
-  Category,
-  LineItem,
-  LineItemOption,
-  Manufacturer,
-  Product,
-  Project,
-  Vendor,
+    Category,
+    LineItem,
+    LineItemOption,
+    Manufacturer,
+    Product,
+    Project,
+    Vendor,
 } from "../types";
 import {
-  batchGetManufacturers,
-  batchGetProducts,
-  batchGetVendors,
-  categoryService,
-  lineItemOptionService,
-  lineItemService,
-  projectService,
+    batchGetManufacturers,
+    batchGetProducts,
+    batchGetVendors,
+    categoryService,
+    lineItemOptionService,
+    lineItemService,
+    projectService,
 } from "./index";
 
 /**
@@ -476,6 +476,97 @@ async function fetchImageAsBase64(url: string): Promise<string> {
   }
 }
 
+function formatCoverSlideAddress(address?: string): string | null {
+  if (!address) return null;
+
+  const normalizedAddress = address.trim();
+  if (!normalizedAddress) return null;
+
+  const parts = normalizedAddress
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (parts.length <= 1) return normalizedAddress;
+
+  const countryTokens = new Set([
+    "us",
+    "usa",
+    "united states",
+    "united states of america",
+    "ca",
+    "canada",
+    "mx",
+    "mexico",
+    "uk",
+    "united kingdom",
+    "gb",
+    "fr",
+    "france",
+    "de",
+    "germany",
+    "it",
+    "italy",
+    "es",
+    "spain",
+    "nl",
+    "netherlands",
+    "be",
+    "belgium",
+    "au",
+    "australia",
+    "ch",
+    "switzerland",
+    "se",
+    "sweden",
+    "no",
+    "norway",
+    "dk",
+    "denmark",
+    "fi",
+    "finland",
+    "ie",
+    "ireland",
+    "pt",
+    "portugal",
+    "at",
+    "austria",
+    "pl",
+    "poland",
+    "cz",
+    "czech republic",
+    "gr",
+    "greece",
+    "ru",
+    "russia",
+    "jp",
+    "japan",
+    "cn",
+    "china",
+    "in",
+    "india",
+    "br",
+    "brazil",
+    "ar",
+    "argentina",
+    "za",
+    "south africa",
+    "kr",
+    "south korea",
+    "sg",
+    "singapore",
+    "ae",
+    "united arab emirates",
+  ]);
+
+  const lastPart = parts[parts.length - 1].toLowerCase();
+  if (countryTokens.has(lastPart)) {
+    return parts.slice(0, -1).join(", ");
+  }
+
+  return normalizedAddress;
+}
+
 /**
  * Phase 5: Generate cover slide matching sample styling
  * Blue gradient background on left 25%, logo and selector info on right
@@ -500,25 +591,53 @@ async function generateCoverSlide(
   });
 
   // Project details in blue section (white text)
-  const projectInfo = [];
-  if (project.name) projectInfo.push(project.name);
-  if (project.customerName) projectInfo.push(project.customerName);
-  if (project.address) projectInfo.push(project.address);
-  if (project.projectNumber)
-    projectInfo.push(`Project: ${project.projectNumber}`);
+  const leftSectionBlocks: Array<{
+    text: string;
+    y: number;
+    fontSize: number;
+    bold?: boolean;
+  }> = [];
 
-  if (projectInfo.length > 0) {
-    slide.addText(projectInfo.join("\n"), {
-      x: 0.2,
-      y: 1.5,
-      w: 2.1,
-      h: 4.0,
+  if (project.customerName) {
+    leftSectionBlocks.push({
+      text: project.customerName,
+      y: 1.25,
       fontSize: 19,
+    });
+  }
+
+  const formattedAddress = formatCoverSlideAddress(project.address);
+  if (formattedAddress) {
+    leftSectionBlocks.push({
+      text: formattedAddress,
+      y: 1.95,
+      fontSize: 17,
+    });
+  }
+
+  if (project.projectNumber) {
+    leftSectionBlocks.push({
+      text: `Project Number: ${project.projectNumber}`,
+      y: 3.0,
+      fontSize: 16,
+      bold: true,
+    });
+  }
+
+  leftSectionBlocks.forEach((block) => {
+    slide.addText(block.text, {
+      x: 0.2,
+      y: block.y,
+      w: 2.1,
+      h: 0.6,
+      fontSize: block.fontSize,
       fontFace: "Calibri",
       color: "FFFFFF",
       valign: "top",
+      margin: 0.02,
+      bold: block.bold,
     });
-  }
+  });
 
   // Logo on right side
   try {
@@ -725,9 +844,9 @@ async function generateProductSlide(
   }
 
   // Product URL just above blue bar (if available)
-  if (product?.productUrl) {
+  if (typeof product?.productUrl === "string" && product.productUrl.trim()) {
     // Ensure URL has protocol prefix
-    let fullUrl = product.productUrl;
+    let fullUrl = product.productUrl.trim();
     if (!fullUrl.startsWith("http://") && !fullUrl.startsWith("https://")) {
       fullUrl = "https://" + fullUrl;
     }
@@ -747,7 +866,11 @@ async function generateProductSlide(
   }
 
   // Line item name upper left with dynamic font sizing and wrapping
-  const nameLength = lineItem.name.length;
+  const lineItemName =
+    typeof lineItem.name === "string" && lineItem.name.trim()
+      ? lineItem.name.trim()
+      : "Untitled Line Item";
+  const nameLength = lineItemName.length;
   let nameFontSize = 35;
   if (nameLength > 60) {
     nameFontSize = 24;
@@ -755,7 +878,7 @@ async function generateProductSlide(
     nameFontSize = 28;
   }
 
-  slide.addText(lineItem.name, {
+  slide.addText(lineItemName, {
     x: 0.3,
     y: 0.2,
     w: 5.5,
@@ -846,6 +969,20 @@ async function generateProductSlide(
     detailsLines.push(`Description: ${description}`);
   }
 
+  const safeQuantity = Number.isFinite(Number(lineItem.quantity))
+    ? Number(lineItem.quantity)
+    : 0;
+  const safeUnitCost = Number.isFinite(Number(lineItem.unitCost))
+    ? Number(lineItem.unitCost)
+    : 0;
+  const safeTotalCost = Number.isFinite(Number(lineItem.totalCost))
+    ? Number(lineItem.totalCost)
+    : 0;
+  const safeUnit =
+    typeof lineItem.unit === "string" && lineItem.unit.trim()
+      ? lineItem.unit.trim()
+      : "";
+
   // Prefer variation's effectiveModelNumber so the per-variation model number shows
   const modelNumber =
     selectedVariation?.effectiveModelNumber ||
@@ -878,9 +1015,11 @@ async function generateProductSlide(
     detailsLines.push(`Collection: ${product.collection}`);
   }
 
-  detailsLines.push(`Quantity: ${lineItem.quantity} ${lineItem.unit}`);
   detailsLines.push(
-    `Unit: $${lineItem.unitCost.toFixed(2)} | Total: $${lineItem.totalCost.toFixed(2)}`,
+    `Quantity: ${safeQuantity}${safeUnit ? ` ${safeUnit}` : ""}`,
+  );
+  detailsLines.push(
+    `Unit: $${safeUnitCost.toFixed(2)} | Total: $${safeTotalCost.toFixed(2)}`,
   );
 
   // Calculate total text length for dynamic font sizing

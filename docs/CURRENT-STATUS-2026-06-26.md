@@ -117,6 +117,7 @@ Salesforce list/detail flow confirmed healthy in both environments, including av
 - This checkpoint intentionally avoids introducing new application behavior.
 - A docs-only git commit was created to mark the stabilization state.
 - There are still unrelated local working-tree changes in this repository outside this status checkpoint.
+- PowerPoint export follow-up was observed during later verification: browser CORS warnings can occur when embedding third-party product images, but the export completed with placeholder fallback. Treat this as a deferred investigation, not a current stabilization blocker.
 
 ---
 

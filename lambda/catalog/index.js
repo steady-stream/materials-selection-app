@@ -156,6 +156,27 @@ exports.handler = async (event) => {
       return await deleteProductVendor(path.split("/")[2]);
     }
 
+    // Batch endpoints — fetch multiple items in one request to reduce overhead
+    if (path === "/batch/manufacturers" && method === "POST") {
+      const { ids } = JSON.parse(event.body);
+      return await batchGetManufacturers(ids);
+    }
+    if (path === "/batch/vendors" && method === "POST") {
+      const { ids } = JSON.parse(event.body);
+      return await batchGetVendors(ids);
+    }
+    if (path === "/batch/products" && method === "POST") {
+      const { ids } = JSON.parse(event.body);
+      return await batchGetProducts(ids);
+    }
+
+    // Image proxy — fetches external image server-side to avoid browser CORS
+    // restrictions on third-party CDNs. Restricted to image content types only.
+    if (path === "/image-proxy" && method === "GET") {
+      const imageUrl = event.queryStringParameters?.url;
+      return await proxyImage(imageUrl);
+    }
+
     return {
       statusCode: 404,
       headers,
@@ -295,6 +316,168 @@ async function deleteManufacturer(id) {
     new DeleteCommand({ TableName: MANUFACTURERS_TABLE, Key: { id } }),
   );
   return { statusCode: 204, headers, body: "" };
+}
+
+// ── Batch endpoints ───────────────────────────────────────────────────────
+// Fetch multiple items in one request to reduce API Gateway load for bulk operations
+
+async function batchGetManufacturers(ids) {
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return {
+      statusCode: 400,
+      headers,
+      body: JSON.stringify({ message: "Invalid or empty ids array" }),
+    };
+  }
+
+  try {
+    const results = await Promise.all(
+      ids.map((id) =>
+        ddb.send(
+          new GetCommand({ TableName: MANUFACTURERS_TABLE, Key: { id } }),
+        ),
+      ),
+    );
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify(results.map((r) => r.Item || null)),
+    };
+  } catch (error) {
+    console.error("Batch get manufacturers error:", error);
+    throw error;
+  }
+}
+
+async function batchGetVendors(ids) {
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return {
+      statusCode: 400,
+      headers,
+      body: JSON.stringify({ message: "Invalid or empty ids array" }),
+    };
+  }
+
+  try {
+    const results = await Promise.all(
+      ids.map((id) =>
+        ddb.send(new GetCommand({ TableName: VENDORS_TABLE, Key: { id } })),
+      ),
+    );
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify(results.map((r) => r.Item || null)),
+    };
+  } catch (error) {
+    console.error("Batch get vendors error:", error);
+    throw error;
+  }
+}
+
+async function proxyImage(imageUrl) {
+  if (!imageUrl) {
+    return {
+      statusCode: 400,
+      headers,
+      body: JSON.stringify({ message: "url parameter required" }),
+    };
+  }
+
+  // Only allow http/https URLs to prevent SSRF against internal AWS endpoints
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(imageUrl);
+  } catch {
+    return {
+      statusCode: 400,
+      headers,
+      body: JSON.stringify({ message: "Invalid URL" }),
+    };
+  }
+  if (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:") {
+    return {
+      statusCode: 400,
+      headers,
+      body: JSON.stringify({ message: "Only http/https URLs are supported" }),
+    };
+  }
+  // Block requests to AWS metadata service and internal hostnames
+  const hostname = parsedUrl.hostname.toLowerCase();
+  if (
+    hostname === "169.254.169.254" ||
+    hostname.endsWith(".internal") ||
+    hostname === "localhost" ||
+    hostname === "127.0.0.1"
+  ) {
+    return {
+      statusCode: 403,
+      headers,
+      body: JSON.stringify({ message: "Forbidden" }),
+    };
+  }
+
+  try {
+    const response = await fetch(imageUrl);
+    if (!response.ok) {
+      return {
+        statusCode: response.status,
+        headers,
+        body: JSON.stringify({ message: `Upstream error: ${response.status}` }),
+      };
+    }
+    const contentType = response.headers.get("content-type") || "image/jpeg";
+    if (!contentType.startsWith("image/")) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ message: "URL does not point to an image" }),
+      };
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    const base64 = Buffer.from(arrayBuffer).toString("base64");
+    return {
+      statusCode: 200,
+      headers: { ...headers, "Content-Type": contentType },
+      body: base64,
+      isBase64Encoded: true,
+    };
+  } catch (error) {
+    console.error("Image proxy error:", error);
+    return {
+      statusCode: 502,
+      headers,
+      body: JSON.stringify({ message: "Failed to fetch image" }),
+    };
+  }
+}
+
+async function batchGetProducts(ids) {
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return {
+      statusCode: 400,
+      headers,
+      body: JSON.stringify({ message: "Invalid or empty ids array" }),
+    };
+  }
+
+  try {
+    const results = await Promise.all(
+      ids.map((id) =>
+        ddb.send(new GetCommand({ TableName: PRODUCTS_TABLE, Key: { id } })),
+      ),
+    );
+    const products = results.map((r) => r.Item || null).filter(Boolean);
+    const hydrated = await hydrateProducts(products);
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify(hydrated),
+    };
+  } catch (error) {
+    console.error("Batch get products error:", error);
+    throw error;
+  }
 }
 
 // ── Product functions ─────────────────────────────────────────────────────────

@@ -1,17 +1,17 @@
 # Materials Selection App
 
-> STALE DOCUMENT NOTICE (2026-06-03)
+> CURRENT STATUS (2026-06-26)
 >
-> This README contains historical deployment and architecture details that are no longer authoritative.
-> Use docs/CURRENT-STATUS-2026-06-03.md for current environment and deployment status.
+> This README is a high-level project overview. The canonical operational status and verification notes live in docs/CURRENT-STATUS-2026-06-26.md.
 
 A full-stack React + AWS serverless application for construction materials selection, tracking, and ordering. Built to replicate and enhance traditional Excel spreadsheet workflows with a modern web interface.
 
 ## 🚀 Quick Access
 
-- **Production**: https://mpmaterials.apiaconsulting.com _(pending DNS)_
-- **Development**: http://materials-selection-app-7525.s3-website-us-east-1.amazonaws.com
-- **API**: https://fiad7hd58j.execute-api.us-east-1.amazonaws.com
+- **Test**: https://mpmaterials.apiaconsulting.com
+- **Production**: https://d377ynyh0ngsji.cloudfront.net
+- **API (test)**: https://xrld1hq3e2.execute-api.us-east-1.amazonaws.com
+- **API (production)**: https://6extgb87v1.execute-api.us-east-1.amazonaws.com
 
 ## ✨ Features
 

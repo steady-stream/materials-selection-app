@@ -132,6 +132,19 @@ exports.handler = async (event) => {
       return await deleteLineItemOption(path.split("/")[2]);
     }
 
+    // Batch endpoints — fetch multiple items in one request
+    if (path === "/batch/lineitem-options" && method === "POST") {
+      const { ids } = JSON.parse(event.body);
+      return await batchGetLineItemOptions(ids);
+    }
+    if (
+      path === "/batch/lineitem-options/by-lineitem-ids" &&
+      method === "POST"
+    ) {
+      const { lineItemIds } = JSON.parse(event.body);
+      return await batchGetLineItemOptionsByLineItemIds(lineItemIds);
+    }
+
     return {
       statusCode: 404,
       headers,
@@ -735,4 +748,77 @@ async function deleteLineItemOption(optionId) {
     }),
   );
   return { statusCode: 204, headers, body: "" };
+}
+
+// ── Batch endpoints ────────────────────────────────────────────────────────
+// Fetch multiple line item options in one request
+
+async function batchGetLineItemOptions(ids) {
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return {
+      statusCode: 400,
+      headers,
+      body: JSON.stringify({ message: "Invalid or empty ids array" }),
+    };
+  }
+
+  try {
+    const results = await Promise.all(
+      ids.map((id) =>
+        ddb.send(
+          new GetCommand({ TableName: LINEITEMOPTIONS_TABLE, Key: { id } }),
+        ),
+      ),
+    );
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify(results.map((r) => r.Item || null)),
+    };
+  } catch (error) {
+    console.error("Batch get lineitem options error:", error);
+    throw error;
+  }
+}
+
+// Fetch options for multiple line items in one request (returns object with lineItemId as key)
+async function batchGetLineItemOptionsByLineItemIds(lineItemIds) {
+  if (!Array.isArray(lineItemIds) || lineItemIds.length === 0) {
+    return {
+      statusCode: 400,
+      headers,
+      body: JSON.stringify({ message: "Invalid or empty lineItemIds array" }),
+    };
+  }
+
+  try {
+    // Query options for each lineItem ID in parallel
+    const results = await Promise.all(
+      lineItemIds.map((lineItemId) =>
+        ddb.send(
+          new QueryCommand({
+            TableName: LINEITEMOPTIONS_TABLE,
+            IndexName: "lineItemId-index",
+            KeyConditionExpression: "lineItemId = :lineItemId",
+            ExpressionAttributeValues: { ":lineItemId": lineItemId },
+          }),
+        ),
+      ),
+    );
+
+    // Combine results into object keyed by lineItemId
+    const optionsByLineItemId = {};
+    lineItemIds.forEach((lineItemId, idx) => {
+      optionsByLineItemId[lineItemId] = results[idx].Items || [];
+    });
+
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify(optionsByLineItemId),
+    };
+  } catch (error) {
+    console.error("Batch get lineitem options by lineitem ids error:", error);
+    throw error;
+  }
 }

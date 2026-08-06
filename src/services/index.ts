@@ -1,3 +1,10 @@
+export {
+    batchGetLineItemOptions,
+    batchGetLineItemOptionsByLineItemIds,
+    batchGetManufacturers,
+    batchGetProducts,
+    batchGetVendors
+} from "./batchService";
 export { categoryService } from "./categoryService";
 export { lineItemOptionService } from "./lineItemOptionService";
 export { lineItemService } from "./lineItemService";

@@ -1,6 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
+    matchesOptionValue,
+    PRODUCT_COLOR_OPTIONS,
+    PRODUCT_FINISH_OPTIONS,
+} from "../constants/productOptionLists";
+import {
     categoryService,
     lineItemOptionService,
     lineItemService,
@@ -34,6 +39,27 @@ import type {
 import { ChatAssistant } from "./ChatAssistant";
 import { ChooseOptionsModal } from "./ChooseOptionsModal";
 import DocumentManager from "./DocumentManager";
+
+const getProductColorFinishSummary = (product: Product): string => {
+  const values = new Set<string>();
+
+  (product.variations || []).forEach((variation) => {
+    const colorFinish = [variation.color, variation.finish]
+      .filter(Boolean)
+      .join(" / ");
+    if (colorFinish) values.add(colorFinish);
+  });
+
+  const baseColorFinish = [product.color, product.finish]
+    .filter(Boolean)
+    .join(" / ");
+  if (baseColorFinish) values.add(baseColorFinish);
+
+  const uniqueValues = Array.from(values);
+  if (uniqueValues.length === 0) return "-";
+  if (uniqueValues.length === 1) return uniqueValues[0];
+  return "Varies by variation";
+};
 
 type ProductCatalogStatus = "idle" | "loading" | "ready" | "error";
 
@@ -148,6 +174,7 @@ const ProjectDetail = () => {
     useState<LineItem | null>(null);
   const [productVendors, setProductVendors] = useState<ProductVendor[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [productNameSearchTerm, setProductNameSearchTerm] = useState("");
   const [filterVendorId, setFilterVendorId] = useState<string>("");
   const [filterManufacturerId, setFilterManufacturerId] = useState<string>("");
   const [filterCategory, setFilterCategory] = useState<string>("");
@@ -159,6 +186,8 @@ const ProjectDetail = () => {
   const [filterCollection, setFilterCollection] = useState<string>("");
   const [filterColor, setFilterColor] = useState<string>("");
   const [filterFinish, setFilterFinish] = useState<string>("");
+  const colorOptions = useMemo(() => [...PRODUCT_COLOR_OPTIONS], []);
+  const finishOptions = useMemo(() => [...PRODUCT_FINISH_OPTIONS], []);
   const [expandedInsertProducts, setExpandedInsertProducts] = useState<
     Set<string>
   >(new Set());
@@ -934,14 +963,16 @@ const ProjectDetail = () => {
   };
 
   const getEditFilteredManufacturers = () => {
-    if (!editingItem) return manufacturers;
+    if (!editingItem) {
+      return [...manufacturers].sort((a, b) => a.name.localeCompare(b.name));
+    }
 
     if (editingItem.productId) {
-      return manufacturers;
+      return [...manufacturers].sort((a, b) => a.name.localeCompare(b.name));
     }
 
     if (!editingItem.vendorId) {
-      return manufacturers;
+      return [...manufacturers].sort((a, b) => a.name.localeCompare(b.name));
     }
 
     const vendorProductIds = productVendors
@@ -955,11 +986,15 @@ const ProjectDetail = () => {
         .filter((id) => id !== undefined),
     );
 
-    return manufacturers.filter((m) => manufacturerIds.has(m.id));
+    return [...manufacturers.filter((m) => manufacturerIds.has(m.id))].sort(
+      (a, b) => a.name.localeCompare(b.name),
+    );
   };
 
   const getEditFilteredVendors = () => {
-    if (!editingItem) return vendors;
+    if (!editingItem) {
+      return [...vendors].sort((a, b) => a.name.localeCompare(b.name));
+    }
 
     if (editingItem.productId) {
       const vendorIds = new Set(
@@ -967,7 +1002,9 @@ const ProjectDetail = () => {
           .filter((pv: ProductVendor) => pv.productId === editingItem.productId)
           .map((pv: ProductVendor) => pv.vendorId),
       );
-      return vendors.filter((v) => vendorIds.has(v.id));
+      return [...vendors.filter((v) => vendorIds.has(v.id))].sort((a, b) =>
+        a.name.localeCompare(b.name),
+      );
     }
 
     if (editingItem.manufacturerId) {
@@ -983,10 +1020,12 @@ const ProjectDetail = () => {
           .map((pv: ProductVendor) => pv.vendorId),
       );
 
-      return vendors.filter((v) => vendorIds.has(v.id));
+      return [...vendors.filter((v) => vendorIds.has(v.id))].sort((a, b) =>
+        a.name.localeCompare(b.name),
+      );
     }
 
-    return vendors;
+    return [...vendors].sort((a, b) => a.name.localeCompare(b.name));
   };
 
   // =============================================================================
@@ -1269,12 +1308,48 @@ const ProjectDetail = () => {
     }
   };
 
+  const resetProductPickerState = (options?: {
+    selectedCategoryId?: string;
+    quantity?: number;
+    vendorId?: string;
+  }) => {
+    setSearchTerm("");
+    setProductNameSearchTerm("");
+    setFilterVendorId("");
+    setFilterManufacturerId("");
+    setFilterCategory("");
+    setFilterTier({ good: false, better: false, best: false });
+    setFilterCollection("");
+    setFilterColor("");
+    setFilterFinish("");
+    setExpandedInsertProducts(new Set());
+    setSelectedCategoryForInsert(options?.selectedCategoryId ?? "");
+    setInsertQuantity(options?.quantity ?? 1);
+    setInsertUnitCost(0);
+    setInsertVendorId(options?.vendorId ?? "");
+    setInsertVariationByProduct({});
+    setShowQuickAddProduct(false);
+    setQuickAddProduct({
+      name: "",
+      manufacturerId: "",
+      modelNumber: "",
+      description: "",
+      category: "",
+      unit: "ea",
+      tier: "",
+      color: "",
+      finish: "",
+    });
+    setShowQAMfrInInsert(false);
+    setQaInsertMfrName("");
+  };
+
   const handleOpenSelectProduct = async (item: LineItem) => {
     setSelectingForLineItem(item);
-    setSelectedCategoryForInsert(item.categoryId);
-    setInsertQuantity(item.quantity);
-    setInsertUnitCost(0);
-    setInsertVariationByProduct({});
+    resetProductPickerState({
+      selectedCategoryId: item.categoryId,
+      quantity: item.quantity,
+    });
     setShowInsertProductModal(true);
 
     if (productCatalogStatus !== "ready") {
@@ -1374,18 +1449,9 @@ const ProjectDetail = () => {
       );
       setShowInsertProductModal(false);
       setSelectingForLineItem(null);
-      setSearchTerm("");
-      setFilterVendorId("");
-      setFilterManufacturerId("");
-      setFilterCategory("");
-      setFilterTier({ good: false, better: false, best: false });
-      setFilterCollection("");
-      setFilterColor("");
-      setFilterFinish("");
-      setInsertQuantity(1);
-      setInsertUnitCost(0);
-      setInsertVendorId("");
-      setInsertVariationByProduct({});
+      resetProductPickerState({
+        selectedCategoryId: categories[0]?.id || "",
+      });
     } catch (err) {
       alert("Failed to select product");
       console.error("Error selecting product:", err);
@@ -1461,18 +1527,9 @@ const ProjectDetail = () => {
       setLineItems((prev) => [...prev, created]);
       setShowInsertProductModal(false);
       setSelectingForLineItem(null);
-      setSearchTerm("");
-      setFilterVendorId("");
-      setFilterManufacturerId("");
-      setFilterCategory("");
-      setFilterTier({ good: false, better: false, best: false });
-      setFilterCollection("");
-      setFilterColor("");
-      setFilterFinish("");
-      setInsertQuantity(1);
-      setInsertUnitCost(0);
-      setInsertVendorId("");
-      setInsertVariationByProduct({});
+      resetProductPickerState({
+        selectedCategoryId: categories[0]?.id || "",
+      });
     } catch (err) {
       alert("Failed to insert product");
       console.error("Error inserting product:", err);
@@ -2002,12 +2059,12 @@ const ProjectDetail = () => {
   const getFilteredManufacturers = () => {
     // If product is selected, show all manufacturers (selection is locked in)
     if (newItem.productId) {
-      return manufacturers;
+      return [...manufacturers].sort((a, b) => a.name.localeCompare(b.name));
     }
 
     if (!newItem.vendorId) {
       // No vendor selected - show all manufacturers
-      return manufacturers;
+      return [...manufacturers].sort((a, b) => a.name.localeCompare(b.name));
     }
 
     // Get all products this vendor carries
@@ -2024,7 +2081,9 @@ const ProjectDetail = () => {
     );
 
     // Return manufacturers that have products with this vendor
-    return manufacturers.filter((m) => manufacturerIds.has(m.id));
+    return [...manufacturers.filter((m) => manufacturerIds.has(m.id))].sort(
+      (a, b) => a.name.localeCompare(b.name),
+    );
   };
 
   /**
@@ -2050,7 +2109,9 @@ const ProjectDetail = () => {
           .filter((pv: ProductVendor) => pv.productId === newItem.productId)
           .map((pv: ProductVendor) => pv.vendorId),
       );
-      return vendors.filter((v) => vendorIds.has(v.id));
+      return [...vendors.filter((v) => vendorIds.has(v.id))].sort((a, b) =>
+        a.name.localeCompare(b.name),
+      );
     }
 
     // If manufacturer selected (no product) - filter to vendors carrying that manufacturer's products
@@ -2067,11 +2128,13 @@ const ProjectDetail = () => {
           .map((pv: ProductVendor) => pv.vendorId),
       );
 
-      return vendors.filter((v) => vendorIds.has(v.id));
+      return [...vendors.filter((v) => vendorIds.has(v.id))].sort((a, b) =>
+        a.name.localeCompare(b.name),
+      );
     }
 
     // No manufacturer or product selected - show all vendors
-    return vendors;
+    return [...vendors].sort((a, b) => a.name.localeCompare(b.name));
   };
 
   const toggleSection = (sectionId: string) => {
@@ -2547,19 +2610,10 @@ const ProjectDetail = () => {
               </button>
               <button
                 onClick={async () => {
+                  resetProductPickerState({
+                    selectedCategoryId: categories[0]?.id || "",
+                  });
                   setShowInsertProductModal(true);
-                  setFilterVendorId("");
-                  setFilterManufacturerId("");
-                  setFilterCategory("");
-                  setFilterTier({ good: false, better: false, best: false });
-                  setFilterCollection("");
-                  setFilterColor("");
-                  setFilterFinish("");
-                  setSearchTerm("");
-                  setSelectedCategoryForInsert(categories[0]?.id || "");
-                  setInsertQuantity(1);
-                  setInsertUnitCost(0);
-                  setInsertVendorId("");
 
                   if (productCatalogStatus !== "ready") {
                     try {
@@ -5488,9 +5542,9 @@ const ProjectDetail = () => {
       {/* Insert Product Modal */}
       {showInsertProductModal && (
         <div className="fixed inset-0 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-2xl border-2 border-gray-300 p-4 w-full max-w-6xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-2xl border-2 border-gray-300 p-3 w-full max-w-6xl h-[min(80vh,860px)] max-h-[90vh] overflow-hidden flex flex-col">
             {/* Header */}
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-3">
                 <h3 className="text-sm font-semibold text-gray-900">
                   {selectingForLineItem
@@ -5526,30 +5580,9 @@ const ProjectDetail = () => {
                 onClick={() => {
                   setShowInsertProductModal(false);
                   setSelectingForLineItem(null);
-                  setSearchTerm("");
-                  setFilterVendorId("");
-                  setFilterManufacturerId("");
-                  setFilterCategory("");
-                  setFilterTier({ good: false, better: false, best: false });
-                  setFilterCollection("");
-                  setFilterColor("");
-                  setFilterFinish("");
-                  setInsertVendorId("");
-                  setInsertVariationByProduct({});
-                  setShowQuickAddProduct(false);
-                  setQuickAddProduct({
-                    name: "",
-                    manufacturerId: "",
-                    modelNumber: "",
-                    description: "",
-                    category: "",
-                    unit: "ea",
-                    tier: "",
-                    color: "",
-                    finish: "",
+                  resetProductPickerState({
+                    selectedCategoryId: categories[0]?.id || "",
                   });
-                  setShowQAMfrInInsert(false);
-                  setQaInsertMfrName("");
                 }}
                 className="text-gray-400 hover:text-gray-600 text-xl font-bold"
               >
@@ -5558,22 +5591,22 @@ const ProjectDetail = () => {
             </div>
 
             {/* Filter Section */}
-            <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg mb-4 space-y-3">
-              <div className="grid grid-cols-4 gap-3">
+            <div className="bg-blue-50 border border-blue-200 p-2.5 rounded-lg mb-2 space-y-2">
+              <div className="grid grid-cols-4 gap-2">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Search
+                  <label className="block text-[11px] font-medium text-gray-700 mb-1">
+                    General Search
                   </label>
                   <input
                     type="text"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Search products..."
+                    placeholder="Name, model, SKU..."
                     className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <label className="block text-[11px] font-medium text-gray-700 mb-1">
                     Vendor
                   </label>
                   <select
@@ -5582,15 +5615,17 @@ const ProjectDetail = () => {
                     className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
                   >
                     <option value="">All Vendors</option>
-                    {vendors.map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.name}
-                      </option>
-                    ))}
+                    {[...vendors]
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.name}
+                        </option>
+                      ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <label className="block text-[11px] font-medium text-gray-700 mb-1">
                     Manufacturer
                   </label>
                   <select
@@ -5599,15 +5634,17 @@ const ProjectDetail = () => {
                     className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
                   >
                     <option value="">All Manufacturers</option>
-                    {manufacturers.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name}
-                      </option>
-                    ))}
+                    {[...manufacturers]
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name}
+                        </option>
+                      ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <label className="block text-[11px] font-medium text-gray-700 mb-1">
                     Product Category
                   </label>
                   <input
@@ -5618,8 +5655,57 @@ const ProjectDetail = () => {
                     className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
+              </div>
+
+              <div className="grid grid-cols-4 gap-2">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <label className="block text-[11px] font-medium text-gray-700 mb-1">
+                    Product Name
+                  </label>
+                  <input
+                    type="text"
+                    value={productNameSearchTerm}
+                    onChange={(e) => setProductNameSearchTerm(e.target.value)}
+                    placeholder="Filter by product name"
+                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-gray-700 mb-1">
+                    Color
+                  </label>
+                  <select
+                    value={filterColor}
+                    onChange={(e) => setFilterColor(e.target.value)}
+                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="">All Colors</option>
+                    {colorOptions.map((color) => (
+                      <option key={color} value={color}>
+                        {color}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-gray-700 mb-1">
+                    Finish
+                  </label>
+                  <select
+                    value={filterFinish}
+                    onChange={(e) => setFilterFinish(e.target.value)}
+                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="">All Finishes</option>
+                    {finishOptions.map((finish) => (
+                      <option key={finish} value={finish}>
+                        {finish}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-gray-700 mb-1">
                     Collection
                   </label>
                   <input
@@ -5630,92 +5716,12 @@ const ProjectDetail = () => {
                     className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Color
-                  </label>
-                  <select
-                    value={filterColor}
-                    onChange={(e) => setFilterColor(e.target.value)}
-                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="">All Colors</option>
-                    {Array.from(
-                      new Set(products.map((p) => p.color).filter(Boolean)),
-                    )
-                      .sort()
-                      .map((color) => (
-                        <option key={color} value={color}>
-                          {color}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Finish
-                  </label>
-                  <select
-                    value={filterFinish}
-                    onChange={(e) => setFilterFinish(e.target.value)}
-                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="">All Finishes</option>
-                    {Array.from(
-                      new Set(products.map((p) => p.finish).filter(Boolean)),
-                    )
-                      .sort()
-                      .map((finish) => (
-                        <option key={finish} value={finish}>
-                          {finish}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Tier Filters */}
-              <div className="flex items-center gap-4">
-                <span className="text-xs font-medium text-gray-700">Tier:</span>
-                <label className="flex items-center gap-1 text-xs cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={filterTier.good}
-                    onChange={(e) =>
-                      setFilterTier({ ...filterTier, good: e.target.checked })
-                    }
-                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                  />
-                  <span>Good</span>
-                </label>
-                <label className="flex items-center gap-1 text-xs cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={filterTier.better}
-                    onChange={(e) =>
-                      setFilterTier({ ...filterTier, better: e.target.checked })
-                    }
-                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                  />
-                  <span>Better</span>
-                </label>
-                <label className="flex items-center gap-1 text-xs cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={filterTier.best}
-                    onChange={(e) =>
-                      setFilterTier({ ...filterTier, best: e.target.checked })
-                    }
-                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                  />
-                  <span>Best</span>
-                </label>
               </div>
             </div>
 
             {/* Insert into Section & Quantity */}
-            <div className="mb-4">
-              <div className="grid grid-cols-4 gap-3">
+            <div className="mb-2">
+              <div className="grid grid-cols-4 gap-2">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">
                     {selectingForLineItem ? "Section" : "Insert into Section *"}
@@ -5784,7 +5790,7 @@ const ProjectDetail = () => {
 
             {/* Quick-Add Product Form */}
             {showQuickAddProduct && (
-              <div className="mb-4 p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+              <div className="mb-2 p-2.5 bg-indigo-50 border border-indigo-200 rounded-lg">
                 <div className="text-xs font-semibold text-indigo-800 mb-2">
                   New Product
                 </div>
@@ -6105,10 +6111,10 @@ const ProjectDetail = () => {
             )}
 
             {/* Products Table */}
-            <div className="border rounded-md overflow-hidden">
-              <div className="overflow-x-auto max-h-96 overflow-y-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-100 sticky top-0">
+            <div className="border rounded-md overflow-hidden flex-1 min-h-0 min-w-0 flex flex-col">
+              <div className="flex-1 overflow-x-auto overflow-y-auto">
+                <table className="w-full min-w-[980px] divide-y divide-gray-200">
+                  <thead className="bg-gray-100 sticky top-0 z-10">
                     <tr>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">
                         Product
@@ -6120,13 +6126,13 @@ const ProjectDetail = () => {
                         Manufacturer
                       </th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">
-                        Category
+                        Color / Finish
+                      </th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">
+                        Collection
                       </th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">
                         Vendor(s)
-                      </th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">
-                        Cost
                       </th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">
                         Variation
@@ -6187,6 +6193,14 @@ const ProjectDetail = () => {
 
                       // Filter products based on all criteria
                       let filtered = products;
+
+                      if (productNameSearchTerm) {
+                        const productNameSearch =
+                          productNameSearchTerm.toLowerCase();
+                        filtered = filtered.filter((p) =>
+                          p.name.toLowerCase().includes(productNameSearch),
+                        );
+                      }
 
                       // Search term filter
                       if (searchTerm) {
@@ -6253,16 +6267,32 @@ const ProjectDetail = () => {
 
                       // Color filter
                       if (filterColor) {
-                        filtered = filtered.filter(
-                          (p) => p.color === filterColor,
-                        );
+                        filtered = filtered.filter((p) => {
+                          const colorValues = [
+                            p.color,
+                            ...(p.variations || []).map(
+                              (variation) => variation.color,
+                            ),
+                          ];
+                          return colorValues.some((value) =>
+                            matchesOptionValue(value, filterColor),
+                          );
+                        });
                       }
 
                       // Finish filter
                       if (filterFinish) {
-                        filtered = filtered.filter(
-                          (p) => p.finish === filterFinish,
-                        );
+                        filtered = filtered.filter((p) => {
+                          const finishValues = [
+                            p.finish,
+                            ...(p.variations || []).map(
+                              (variation) => variation.finish,
+                            ),
+                          ];
+                          return finishValues.some((value) =>
+                            matchesOptionValue(value, filterFinish),
+                          );
+                        });
                       }
 
                       // Vendor filter - only show products that have this vendor
@@ -6320,9 +6350,6 @@ const ProjectDetail = () => {
                           const productVendorList = productVendors.filter(
                             (pv) => pv.productId === product.id,
                           );
-                          const primaryPV =
-                            productVendorList.find((pv) => pv.isPrimary) ||
-                            productVendorList[0];
 
                           return (
                             <tr
@@ -6564,7 +6591,10 @@ const ProjectDetail = () => {
                                 {manufacturer?.name || "-"}
                               </td>
                               <td className="px-3 py-2 text-xs text-gray-600">
-                                {product.category || "-"}
+                                {getProductColorFinishSummary(product)}
+                              </td>
+                              <td className="px-3 py-2 text-xs text-gray-600">
+                                {product.collection || "-"}
                               </td>
                               <td className="px-3 py-2 text-xs text-gray-600">
                                 {productVendorList.length > 0 ? (
@@ -6599,11 +6629,6 @@ const ProjectDetail = () => {
                                 ) : (
                                   "-"
                                 )}
-                              </td>
-                              <td className="px-3 py-2 text-xs text-gray-600">
-                                {primaryPV
-                                  ? `$${primaryPV.cost.toFixed(2)}`
-                                  : "-"}
                               </td>
                               <td className="px-3 py-2 text-xs text-gray-600">
                                 {hasMultipleVariations ? (
@@ -6692,43 +6717,6 @@ const ProjectDetail = () => {
                   </tbody>
                 </table>
               </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="flex justify-end gap-2 mt-4 pt-3 border-t">
-              <button
-                onClick={() => {
-                  setShowInsertProductModal(false);
-                  setSelectingForLineItem(null);
-                  setSearchTerm("");
-                  setFilterVendorId("");
-                  setFilterManufacturerId("");
-                  setFilterCategory("");
-                  setFilterTier({ good: false, better: false, best: false });
-                  setFilterCollection("");
-                  setFilterColor("");
-                  setFilterFinish("");
-                  setInsertVendorId("");
-                  setInsertVariationByProduct({});
-                  setShowQuickAddProduct(false);
-                  setQuickAddProduct({
-                    name: "",
-                    manufacturerId: "",
-                    modelNumber: "",
-                    description: "",
-                    category: "",
-                    unit: "ea",
-                    tier: "",
-                    color: "",
-                    finish: "",
-                  });
-                  setShowQAMfrInInsert(false);
-                  setQaInsertMfrName("");
-                }}
-                className="px-3 py-1 text-xs text-gray-700 hover:text-gray-900"
-              >
-                Close
-              </button>
             </div>
           </div>
         </div>
